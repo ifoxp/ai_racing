@@ -24,6 +24,7 @@ class Track:
     left_edge: np.ndarray    # (N, 2) — лівий край асфальту
     right_edge: np.ndarray   # (N, 2) — правий край асфальту
     checkpoints: np.ndarray  # (M, 2) — контрольні точки вздовж центральної лінії
+    checkpoint_indices: np.ndarray  # (M,) — індекси checkpoints у center_line/left_edge/right_edge
     control_points: np.ndarray  # (K, 2) — вихідні точки циклу до згладжування
     start_pos: np.ndarray    # (2,) — координати центру стартової лінії
     start_dir: np.ndarray    # (2,) — нормалізований вектор напрямку руху на старті
@@ -322,7 +323,7 @@ def _has_sharp_turns(points: np.ndarray, min_angle_deg: float = 75.0) -> bool:
 
 
 def generate_track(seed: int, point_count: int = 18, radius: float = 400.0,
-                    track_width: float = 22.0, checkpoint_spacing: int = 8,
+                    track_width: float = 22.0, checkpoint_count: int = 24,
                     start_straight_length: float = 120.0) -> Track:
     """Генерує повну трасу за seed з гарантованою стартовою прямою. Використовує
     патерн 'Generate & Validate': якщо готова траса не відповідає вимогам (гострі
@@ -389,6 +390,15 @@ def generate_track(seed: int, point_count: int = 18, radius: float = 400.0,
             break
         current_seed += 1
 
+    # center_line починається з довільної точки (кореня DFS-обходу графа), яка
+    # НЕ збігається зі start_pos (середина найдовшого відрізка). Без цього кроку
+    # checkpoints[0] (і, відповідно, весь порядок checkpoints) опиняється в
+    # випадковому місці траси, а не на стартовій лінії. Обертаємо масив так, щоб
+    # індекс 0 був найближчою до start_pos точкою.
+    dists_to_start = np.linalg.norm(center_line - start_pos, axis=1)
+    start_idx = int(np.argmin(dists_to_start))
+    center_line = np.roll(center_line, -start_idx, axis=0)
+
     left_edge, right_edge = _offset_loop(center_line, track_width)
 
     # Пост-обробка: згладжуємо самі краї асфальту — прибирає "хвости ластівки"
@@ -396,7 +406,13 @@ def generate_track(seed: int, point_count: int = 18, radius: float = 400.0,
     left_edge = _smooth_dense_line(left_edge, passes=2)
     right_edge = _smooth_dense_line(right_edge, passes=2)
 
-    checkpoints = center_line[::checkpoint_spacing]
+    # Крок обчислюється від бажаної КІЛЬКОСТІ checkpoints, а не від фіксованого
+    # кроку по індексу масиву — після Чайкіна+згладжування center_line може мати
+    # від сотень до тисяч точок залежно від траси, тож фіксований крок давав то
+    # занадто мало, то (як було) сотні checkpoints, що покривали всю трасу лініями.
+    spacing = max(1, len(center_line) // checkpoint_count)
+    checkpoint_indices = np.arange(0, len(center_line), spacing)
+    checkpoints = center_line[checkpoint_indices]
 
     return Track(
         seed=seed,  # зберігаємо оригінальний вхідний seed для сумісності з іншим кодом
@@ -404,6 +420,7 @@ def generate_track(seed: int, point_count: int = 18, radius: float = 400.0,
         left_edge=left_edge,
         right_edge=right_edge,
         checkpoints=checkpoints,
+        checkpoint_indices=checkpoint_indices,
         control_points=control_points,
         start_pos=start_pos,
         start_dir=start_dir,
