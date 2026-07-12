@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>Arcade — бібліотека проєкту CarAI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* CarAI — навчальний портал: спільні дизайн-токени (assets/theme.css) */
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: local("JetBrains Mono"), local("JetBrainsMono-Regular");
+  font-weight: 400 800;
+}
+
+:root {
+  --bg: #0e1416;
+  --bg-raised: #141b1e;
+  --bg-card: #171f22;
+  --border: #263135;
+  --border-soft: #1c2528;
+
+  --text-primary: #dfe7e9;
+  --text-secondary: #93a7ac;
+  --text-faint: #5c7075;
+
+  --accent: #e8a33d;
+  --accent-soft: #e8a33d1a;
+  --accent-strong: #ffb84d;
+  --cyan: #4fb2c7;
+  --cyan-soft: #4fb2c71a;
+
+  --good: #5fbf8f;
+  --warn: #e8a33d;
+  --bad: #d8695a;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f5f3ee;
+  --bg-raised: #ffffff;
+  --bg-card: #ffffff;
+  --border: #ddd7c9;
+  --border-soft: #e8e3d6;
+
+  --text-primary: #23201a;
+  --text-secondary: #5c5648;
+  --text-faint: #948d7a;
+
+  --accent: #b9750f;
+  --accent-soft: #b9750f14;
+  --accent-strong: #96600c;
+  --cyan: #1a7a91;
+  --cyan-soft: #1a7a9114;
+
+  --good: #2f8f63;
+  --warn: #b9750f;
+  --bad: #b23c2c;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f3ee;
+    --bg-raised: #ffffff;
+    --bg-card: #ffffff;
+    --border: #ddd7c9;
+    --border-soft: #e8e3d6;
+
+    --text-primary: #23201a;
+    --text-secondary: #5c5648;
+    --text-faint: #948d7a;
+
+    --accent: #b9750f;
+    --accent-soft: #b9750f14;
+    --accent-strong: #96600c;
+    --cyan: #1a7a91;
+    --cyan-soft: #1a7a9114;
+
+    --good: #2f8f63;
+    --warn: #b9750f;
+    --bad: #b23c2c;
+
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+body {
+  font-family: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+h1, h2, h3, h4 {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  text-wrap: balance;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+p { margin: 0; color: var(--text-secondary); }
+
+a { color: var(--cyan); }
+
+.page {
+  width: 90%;
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 0 0 120px;
+}
+
+@media (max-width: 720px) {
+  .page { width: 92%; }
+}
+
+.eyebrow {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+code, pre {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13.5px;
+}
+
+pre {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  overflow-x: auto;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+code:not(pre code) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.scroll-x {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14.5px;
+}
+
+th, td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: top;
+}
+
+th {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+td.num { font-variant-numeric: tabular-nums; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.pill.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--border)); }
+.pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
+.pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--border)); }
+
+::selection {
+  background: var(--accent);
+  color: #0e1416;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* Озвучка тексту (Web Speech API) — кнопка з'являється при наведенні */
+.tts-target {
+  position: relative;
+}
+.tts-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity .12s ease, transform .12s ease, color .12s ease, border-color .12s ease;
+  pointer-events: none;
+  z-index: 5;
+}
+.tts-target:hover .tts-btn,
+.tts-btn:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.tts-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.tts-btn.speaking {
+  opacity: 1;
+  pointer-events: auto;
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.nav-bar {
+  border-bottom: 1px solid var(--border-soft);
+}
+.nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px 0;
+  width: 90%;
+  max-width: 1560px;
+  margin: 0 auto;
+}
+.nav-brand {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+.nav-brand b { color: var(--text-primary); }
+.nav-links { display: flex; gap: 24px; font-family: "JetBrains Mono", monospace; font-size: 13px; }
+.nav-links a { color: var(--text-secondary); text-decoration: none; }
+.nav-links a.active { color: var(--accent); }
+.nav-links a:hover { color: var(--accent); }
+
+.hero {
+  padding: 64px 0 40px;
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 48px;
+  align-items: center;
+}
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; } }
+
+.hero h1 {
+  font-size: clamp(32px, 4.4vw, 46px);
+  line-height: 1.12;
+  margin-top: 14px;
+}
+.hero h1 .accent { color: var(--accent); }
+.hero p.lead {
+  margin-top: 18px;
+  font-size: 17px;
+  max-width: 54ch;
+  color: var(--text-secondary);
+}
+
+.hero-diagram { width: 100%; }
+
+section { margin-top: 88px; }
+section > .eyebrow { display: block; margin-bottom: 10px; }
+section h2 { font-size: 26px; margin-bottom: 6px; }
+section p.dek { color: var(--text-faint); font-size: 15px; margin-top: 8px; max-width: 68ch; }
+
+.stack-compare {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 32px;
+}
+@media (max-width: 860px) { .stack-compare { grid-template-columns: 1fr; } }
+
+.lib-card {
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.lib-card.chosen {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.lib-card .lib-name {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.lib-card ul { margin: 0; padding-left: 18px; color: var(--text-secondary); font-size: 14px; line-height: 1.7; }
+.lib-card ul.cons li::marker { color: var(--bad); }
+.lib-card ul.pros li::marker { color: var(--good); }
+.lib-card .sub-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); font-family: "JetBrains Mono", monospace; margin-bottom: 4px; }
+
+.matrix-wrap { margin-top: 28px; }
+
+.arch-diagram-card {
+  margin-top: 28px;
+  padding: 28px;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 28px;
+  align-items: start;
+}
+@media (max-width: 860px) { .two-col { grid-template-columns: 1fr; } }
+
+.examples-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-top: 28px;
+}
+@media (max-width: 700px) { .examples-grid { grid-template-columns: 1fr; } }
+.example-item {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+.example-item .ex-name { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 14px; color: var(--text-primary); }
+.example-item .ex-desc { font-size: 13.5px; color: var(--text-secondary); margin-top: 4px; }
+
+.callout {
+  margin-top: 28px;
+  padding: 18px 22px;
+  border-left: 3px solid var(--cyan);
+  background: var(--cyan-soft);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 14.5px;
+  color: var(--text-primary);
+}
+.callout .callout-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.step-flow { display: flex; flex-direction: column; gap: 0; margin-top: 28px; }
+.step {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 18px;
+  padding: 18px 0;
+  border-top: 1px solid var(--border-soft);
+}
+.step:first-child { border-top: none; }
+.step .step-num {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  color: var(--accent);
+  padding-top: 2px;
+}
+.step h4 { font-size: 15px; margin-bottom: 6px; color: var(--text-primary); font-family: "JetBrains Mono", monospace;}
+.step p { font-size: 14.5px; }
+
+footer {
+  margin-top: 100px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 13px;
+  color: var(--text-faint);
+  display: flex;
+  justify-content: space-between;
+}
+</style>
+</head>
+<body>
+
+<div class="nav-bar">
+  <nav class="nav">
+    <div class="nav-brand"><b>CarAI</b> / навчання</div>
+    <div class="nav-links">
+      <a class="active" href="01-arcade-library.html">01 · Бібліотека</a>
+      <a href="02-track-generation.html">02 · Генерація траси</a>
+    </div>
+  </nav>
+</div>
+
+<div class="page">
+
+  <div class="hero">
+    <div>
+      <span class="eyebrow">Крок 01 · Технологічний вибір</span>
+      <h1>Чому <span class="accent">Arcade</span>, а не Pygame чи Pyglet</h1>
+      <p class="lead">
+        Порівняння трьох бібліотек для 2D-ігор на Python — з точки зору рендеру,
+        вбудованої фізики та майбутнього RL-тренування бота. Плюс архітектурний
+        патерн, який знадобиться, коли гра переросте у середовище для навчання агента.
+      </p>
+    </div>
+    <svg class="hero-diagram" viewBox="0 0 380 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="trackGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="var(--accent)" stop-opacity="0.9"/>
+          <stop offset="1" stop-color="var(--cyan)" stop-opacity="0.9"/>
+        </linearGradient>
+      </defs>
+      <rect x="0.5" y="0.5" width="379" height="259" rx="12" fill="var(--bg-card)" stroke="var(--border)"/>
+      <path d="M60 210 C 60 130, 100 90, 160 90 C 230 90, 220 40, 300 50 C 340 55, 340 120, 300 140 C 250 165, 260 210, 200 210 C 150 210, 140 170, 60 210 Z"
+            fill="none" stroke="var(--border)" stroke-width="34" stroke-linejoin="round"/>
+      <path d="M60 210 C 60 130, 100 90, 160 90 C 230 90, 220 40, 300 50 C 340 55, 340 120, 300 140 C 250 165, 260 210, 200 210 C 150 210, 140 170, 60 210 Z"
+            fill="none" stroke="url(#trackGrad)" stroke-width="2" stroke-dasharray="6 7"/>
+      <circle cx="60" cy="210" r="6" fill="var(--accent-strong)"/>
+      <text x="72" y="214" class="mono" font-size="10" fill="var(--text-faint)">start / seed</text>
+    </svg>
+  </div>
+
+  <section id="compare">
+    <span class="eyebrow">Порівняння</span>
+    <h2>Три бібліотеки, три філософії</h2>
+    <p class="dek">Усі три вміють малювати спрайти на екрані 60 разів на секунду. Різниця — у тому, скільки з фізики,
+      рендеру та архітектури зроблено за тебе, і скільки доведеться писати руками.</p>
+
+    <div class="stack-compare">
+      <div class="lib-card">
+        <div class="lib-name">Pygame <span class="pill">Класика з 2000-го</span></div>
+        <div>
+          <div class="sub-label">Плюси</div>
+          <ul class="pros">
+            <li>Найбільше туторіалів саме під racing/top-down ігри</li>
+            <li>Простий, прозорий API — нічого не приховано</li>
+            <li>Найлегше зробити швидкий headless-цикл для RL вручну</li>
+          </ul>
+        </div>
+        <div>
+          <div class="sub-label">Мінуси</div>
+          <ul class="cons">
+            <li>Немає вбудованої фізики — колізії й тертя пишеш сам</li>
+            <li>Рендер програмний (CPU), без апаратного прискорення</li>
+            <li>Візуально застаріває швидше, якщо не докласти рук</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="lib-card chosen">
+        <div class="lib-name">Arcade <span class="pill good">Обрано</span></div>
+        <div>
+          <div class="sub-label">Плюси</div>
+          <ul class="pros">
+            <li>Рендер через OpenGL (pyglet) — апаратне прискорення</li>
+            <li>Вбудований фізичний рушій PymunkPhysicsEngine</li>
+            <li>Sprite / SpriteList з коробки, до ~400 000 спрайтів при 60 fps</li>
+            <li>Офіційний headless-режим (<code>ARCADE_HEADLESS</code>) для тренування без вікна</li>
+          </ul>
+        </div>
+        <div>
+          <div class="sub-label">Мінуси</div>
+          <ul class="cons">
+            <li>Менше community й прикладів саме під гонки</li>
+            <li>Більше абстракцій — трохи менше видно "під капотом"</li>
+            <li>Залежність від OpenGL-драйверів</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="lib-card">
+        <div class="lib-name">Pyglet <span class="pill">База під Arcade</span></div>
+        <div>
+          <div class="sub-label">Плюси</div>
+          <ul class="pros">
+            <li>Максимальна гнучкість, доступ до шейдерів</li>
+            <li>Швидкий рендер, той самий движок, що і в Arcade</li>
+          </ul>
+        </div>
+        <div>
+          <div class="sub-label">Мінуси</div>
+          <ul class="cons">
+            <li>Немає готових Sprite / Physics зручностей</li>
+            <li>Найбільше коду для того самого результату</li>
+            <li>Overkil для простої 2D-гри з видом зверху</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="callout-label">Уточнення після пошуку</span>
+      Arcade 3.x має офіційний headless-режим (env-змінна <code>ARCADE_HEADLESS</code>, вмикається до імпорту arcade) —
+      можна ганяти симуляцію без вікна взагалі. Це знімає частину мінусу "складніше для RL", який здавався
+      очевидним на перший погляд: різниця з pygame менша, ніж здається, головне — не змішувати логіку гри з кодом рендеру.
+    </div>
+  </section>
+
+  <section id="matrix">
+    <span class="eyebrow">Таблиця рішень</span>
+    <h2>Матриця по критеріях</h2>
+    <div class="matrix-wrap scroll-x">
+      <table>
+        <thead>
+          <tr><th>Критерій</th><th>Pygame</th><th>Arcade</th><th>Pyglet</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Крива навчання</td><td class="num">низька</td><td class="num">середня</td><td class="num">висока</td></tr>
+          <tr><td>Рендер</td><td>CPU (software)</td><td>GPU (OpenGL)</td><td>GPU (OpenGL)</td></tr>
+          <tr><td>Вбудована фізика</td><td>немає</td><td>pymunk з коробки</td><td>немає</td></tr>
+          <tr><td>Headless режим</td><td>ручний, тривіальний</td><td>офіційний, ENV-прапорець</td><td>ручний</td></tr>
+          <tr><td>Максимум спрайтів @ 60fps</td><td class="num">залежить від сцени</td><td class="num">~400 000</td><td class="num">залежить від сцени</td></tr>
+          <tr><td>Tilemap (Tiled editor)</td><td>сторонні бібліотеки</td><td>вбудована підтримка</td><td>немає</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <span class="eyebrow">Архітектура</span>
+    <h2>Симуляція окремо від рендеру</h2>
+    <p class="dek">Незалежно від бібліотеки, для майбутнього RL-тренування критично розділити гру на два шари.
+      Це патерн, на якому побудовані усі серйозні RL-середовища (Gymnasium, попередньо OpenAI Gym).</p>
+
+    <div class="two-col">
+      <svg viewBox="0 0 480 340" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="478" height="338" rx="10" fill="var(--bg-card)" stroke="var(--border)"/>
+
+        <rect x="24" y="28" width="200" height="120" rx="8" fill="var(--bg-raised)" stroke="var(--accent)" stroke-width="1.5"/>
+        <text x="40" y="52" class="mono" font-size="11" letter-spacing="1" fill="var(--accent)">SIMULATION</text>
+        <text x="40" y="76" class="mono" font-size="12.5" fill="var(--text-primary)">CarState</text>
+        <text x="40" y="94" class="mono" font-size="12.5" fill="var(--text-primary)">TrackModel</text>
+        <text x="40" y="112" class="mono" font-size="12.5" fill="var(--text-primary)">physics_step(dt)</text>
+        <text x="40" y="130" class="mono" font-size="11" fill="var(--text-faint)">чистий Python, без вікна</text>
+
+        <rect x="256" y="28" width="200" height="120" rx="8" fill="var(--bg-raised)" stroke="var(--cyan)" stroke-width="1.5"/>
+        <text x="272" y="52" class="mono" font-size="11" letter-spacing="1" fill="var(--cyan)">RENDERER</text>
+        <text x="272" y="76" class="mono" font-size="12.5" fill="var(--text-primary)">arcade.Window</text>
+        <text x="272" y="94" class="mono" font-size="12.5" fill="var(--text-primary)">SpriteList.draw()</text>
+        <text x="272" y="112" class="mono" font-size="12.5" fill="var(--text-primary)">on_draw()</text>
+        <text x="272" y="130" class="mono" font-size="11" fill="var(--text-faint)">вмикається лише "подивитись"</text>
+
+        <line x1="224" y1="88" x2="256" y2="88" stroke="var(--text-faint)" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 Z" fill="var(--text-faint)"/>
+          </marker>
+        </defs>
+        <text x="228" y="82" class="mono" font-size="10" fill="var(--text-faint)">state</text>
+
+        <rect x="24" y="188" width="200" height="120" rx="8" fill="var(--bg-raised)" stroke="var(--good)" stroke-width="1.5"/>
+        <text x="40" y="212" class="mono" font-size="11" letter-spacing="1" fill="var(--good)">RL AGENT (пізніше)</text>
+        <text x="40" y="236" class="mono" font-size="12.5" fill="var(--text-primary)">policy(state) → action</text>
+        <text x="40" y="254" class="mono" font-size="12.5" fill="var(--text-primary)">reward tracking</text>
+        <text x="40" y="272" class="mono" font-size="11" fill="var(--text-faint)">тисячі кроків / сек, без вікна</text>
+
+        <line x1="124" y1="148" x2="124" y2="188" stroke="var(--text-faint)" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="60" y1="188" x2="60" y2="148" stroke="var(--text-faint)" stroke-width="1.5" stroke-dasharray="3 4" marker-end="url(#arrow)"/>
+        <text x="130" y="170" class="mono" font-size="10" fill="var(--text-faint)">observation</text>
+        <text x="4" y="170" class="mono" font-size="10" fill="var(--text-faint)">action</text>
+
+        <rect x="256" y="188" width="200" height="120" rx="8" fill="var(--bg-raised)" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <text x="272" y="212" class="mono" font-size="11" letter-spacing="1" fill="var(--text-faint)">HUMAN PLAY</text>
+        <text x="272" y="236" class="mono" font-size="12.5" fill="var(--text-primary)">WASD / стіки</text>
+        <text x="272" y="254" class="mono" font-size="12.5" fill="var(--text-primary)">on_key_press()</text>
+        <text x="272" y="272" class="mono" font-size="11" fill="var(--text-faint)">той самий вхід що і в агента</text>
+      </svg>
+
+      <div>
+        <p style="font-size:15px;color:var(--text-primary);">
+          <strong style="font-family:'JetBrains Mono',monospace;">SIMULATION</strong> — це серце гри: позиція машини,
+          швидкість, зіткнення з краєм траси, модель треку. Не залежить від Arcade взагалі — теоретично її можна
+          імпортувати навіть у консольний скрипт без графіки.
+        </p>
+        <p style="margin-top:14px;font-size:15px;color:var(--text-primary);">
+          <strong style="font-family:'JetBrains Mono',monospace;">RENDERER</strong> — тонкий шар, який щокадру питає
+          у симуляції "де зараз машина" і малює це через <code>arcade.SpriteList</code>. Вимикається повністю
+          під час headless RL-тренування.
+        </p>
+        <p style="margin-top:14px;font-size:15px;color:var(--text-primary);">
+          Ключовий наслідок: і людина (WASD), і майбутній RL-агент подають на вхід симуляції рівно той самий
+          формат дії — <code>{газ, кермо, гальмо}</code>. Це і є той місток, який дозволить моделі "їздити на твоєму рівні":
+          вона вчиться на тому самому інтерфейсі, яким керуєш ти.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="perf">
+    <span class="eyebrow">Продуктивність</span>
+    <h2>Що реально впливає на швидкість</h2>
+    <div class="step-flow">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div>
+          <h4>Рендер vs фізика — різні вузькі місця</h4>
+          <p>GPU (RTX 5070) прискорює рендер (малювання спрайтів), але майже не бере участі у фізичних розрахунках
+            руху машини чи в майбутньому навчанні нейромережі на PyTorch — це окремі, незалежні навантаження.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div>
+          <h4>SpriteList, а не окремі Sprite</h4>
+          <p>Arcade пакетить малювання через <code>SpriteList</code> — тисячі об'єктів малюються одним GPU-викликом.
+            Проєкт з нуля має класти всі об'єкти траси в один <code>SpriteList</code>, а не малювати по одному.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <div>
+          <h4>Headless-режим для тренування</h4>
+          <p><code>ARCADE_HEADLESS=1</code> перед імпортом arcade вимикає вікно й події миші/клавіатури — симуляція
+            крутиться настільки швидко, наскільки дозволяє сам Python-код фізики, без обмеження в 60 fps.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">04</div>
+        <div>
+          <h4>Garbage collection текстур</h4>
+          <p>Arcade прибирає невикористані OpenGL-об'єкти раз на кадр. При частому створенні/видаленні великої
+            кількості спрайтів (наприклад, генерація нової траси щоразу) варто явно керувати цим циклом.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="examples">
+    <span class="eyebrow">З практики</span>
+    <h2>Де це реально використовують</h2>
+    <p class="dek">Щоб цей стек не був знанням "в порожнечу" — ось де ті самі ідеї (Arcade, pymunk, розділення
+      симуляції й рендеру, headless-тренування) зустрічаються в реальних проєктах.</p>
+    <div class="examples-grid">
+      <div class="example-item">
+        <div class="ex-name">Python Arcade Academy — офіційні ігри-приклади</div>
+        <div class="ex-desc">Платформери й top-down ігри на pymunk_platformer з фізикою зіткнень — той самий рушій,
+          що піде під колізії машини з краєм траси.</div>
+      </div>
+      <div class="example-item">
+        <div class="ex-name">Gymnasium CarRacing-v2</div>
+        <div class="ex-desc">Еталонне RL-середовище для навчання агентів водінню (наступник OpenAI Gym) —
+          той самий принцип розділення симуляції/рендеру та headless-тренування.</div>
+      </div>
+      <div class="example-item">
+        <div class="ex-name">pymunk (Chipmunk2D) у продакшн-іграх</div>
+        <div class="ex-desc">Той самий фізичний рушій, на якому в Arcade побудований PymunkPhysicsEngine,
+          використовується як окрема бібліотека в комерційних 2D-іграх поза Python.</div>
+      </div>
+      <div class="example-item">
+        <div class="ex-name">Spline-based трек-редактори (Trackmania й подібні)</div>
+        <div class="ex-desc">Крива через контрольні точки для форми траси — концептуально той самий підхід,
+          який ти вже розумієш і від якого свідомо відмовився на користь Voronoi (сторінка 02).</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>CarAI · навчальні матеріали · не є частиною коду гри</span>
+    <span>01 / 02</span>
+  </footer>
+
+</div>
+<script>
+// Озвучка тексту через Web Speech API (assets/tts.js)
+(function () {
+  if (!('speechSynthesis' in window)) return;
+  const synth = window.speechSynthesis;
+  let voice = null;
+
+  function pickVoice() {
+    const voices = synth.getVoices();
+    if (!voices.length) return null;
+    const priority = ['uk', 'ru', 'en'];
+    for (const langPrefix of priority) {
+      const found = voices.find(v => v.lang.toLowerCase().startsWith(langPrefix));
+      if (found) return found;
+    }
+    return voices[0];
+  }
+
+  function ensureVoice(cb) {
+    if (voice) { cb(voice); return; }
+    voice = pickVoice();
+    if (voice) { cb(voice); return; }
+    synth.addEventListener('voiceschanged', function onChange() {
+      voice = pickVoice();
+      synth.removeEventListener('voiceschanged', onChange);
+      if (voice) cb(voice);
+    });
+  }
+
+  let currentUtterance = null;
+
+  function speak(text, btn) {
+    if (synth.speaking) {
+      synth.cancel();
+      if (btn) btn.classList.remove('speaking');
+      if (currentUtterance && currentUtterance.__btn === btn) { currentUtterance = null; return; }
+    }
+    ensureVoice((v) => {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.voice = v;
+      utter.lang = v.lang;
+      utter.rate = 1.0;
+      utter.__btn = btn;
+      utter.onstart = () => btn && btn.classList.add('speaking');
+      utter.onend = () => btn && btn.classList.remove('speaking');
+      utter.onerror = () => btn && btn.classList.remove('speaking');
+      currentUtterance = utter;
+      synth.speak(utter);
+    });
+  }
+
+  function makeButton(targetEl) {
+    const btn = document.createElement('button');
+    btn.className = 'tts-btn';
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Озвучити текст');
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+      '<path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/>' +
+      '<path d="M16.5 8.5a5 5 0 0 1 0 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>' +
+      '<path d="M19 6a9 9 0 0 1 0 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.6"/>' +
+      '</svg>';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const text = targetEl.innerText || targetEl.textContent;
+      speak(text.trim(), btn);
+    });
+    return btn;
+  }
+
+  function wrapTarget(el) {
+    if (el.dataset.ttsWrapped) return;
+    if (!el.textContent || el.textContent.trim().length < 12) return;
+    el.dataset.ttsWrapped = '1';
+    el.classList.add('tts-target');
+    el.appendChild(makeButton(el));
+  }
+
+  function init() {
+    const selectors = [
+      'section p.dek', '.card p', '.formula-box', '.callout',
+      '.step p', '.lib-card ul li', '.example-item .ex-desc', '.pipe-step p'
+    ];
+    document.querySelectorAll(selectors.join(',')).forEach(wrapTarget);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

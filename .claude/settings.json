@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"e:/Programing/Phyton/CarAI/Навчання\" && ls \"e:/Programing/Phyton/CarAI\")",
+      "Bash(node pipeline_test.js)",
+      "Bash(node pipeline_test2.js)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"console.log\\(require\\('fs'\\).readFileSync\\('pipeline_test2.js','utf8'\\).split\\('// --- self-intersection'\\)[0]\\)\")",
+      "Bash(grep -n \"</script>$\" \"e:/Programing/Phyton/CarAI/Навчання/02-track-generation.html\")",
+      "Bash(node --eval ' *)",
+      "Bash(python -c ' *)",
+      "Bash(python -m venv venv)",
+      "Bash(\"venv/Scripts/python.exe\" -m pip install --upgrade pip -q)",
+      "Bash(\"venv/Scripts/python.exe\" -m pip install arcade numpy scipy -q)",
+      "Bash(\"venv/Scripts/python.exe\" -c \"import arcade; print\\('arcade', arcade.version.VERSION\\)\")",
+      "Bash(venv/Scripts/python.exe -c ' *)",
+      "Bash(timeout 8 \"venv/Scripts/python.exe\" src/main.py)",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(timeout 6 \"venv/Scripts/python.exe\" src/main.py)"
+    ],
+    "additionalDirectories": [
+      "e:\\Programing\\Phyton\\CarAI"
+    ]
+  }
+}

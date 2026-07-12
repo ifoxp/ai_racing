@@ -1,0 +1,1355 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>Voronoi / Delaunay — генерація траси CarAI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* CarAI — навчальний портал: спільні дизайн-токени (assets/theme.css) */
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: local("JetBrains Mono"), local("JetBrainsMono-Regular");
+  font-weight: 400 800;
+}
+
+:root {
+  --bg: #0e1416;
+  --bg-raised: #141b1e;
+  --bg-card: #171f22;
+  --border: #263135;
+  --border-soft: #1c2528;
+
+  --text-primary: #dfe7e9;
+  --text-secondary: #93a7ac;
+  --text-faint: #5c7075;
+
+  --accent: #e8a33d;
+  --accent-soft: #e8a33d1a;
+  --accent-strong: #ffb84d;
+  --cyan: #4fb2c7;
+  --cyan-soft: #4fb2c71a;
+
+  --good: #5fbf8f;
+  --warn: #e8a33d;
+  --bad: #d8695a;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f5f3ee;
+  --bg-raised: #ffffff;
+  --bg-card: #ffffff;
+  --border: #ddd7c9;
+  --border-soft: #e8e3d6;
+
+  --text-primary: #23201a;
+  --text-secondary: #5c5648;
+  --text-faint: #948d7a;
+
+  --accent: #b9750f;
+  --accent-soft: #b9750f14;
+  --accent-strong: #96600c;
+  --cyan: #1a7a91;
+  --cyan-soft: #1a7a9114;
+
+  --good: #2f8f63;
+  --warn: #b9750f;
+  --bad: #b23c2c;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f3ee;
+    --bg-raised: #ffffff;
+    --bg-card: #ffffff;
+    --border: #ddd7c9;
+    --border-soft: #e8e3d6;
+
+    --text-primary: #23201a;
+    --text-secondary: #5c5648;
+    --text-faint: #948d7a;
+
+    --accent: #b9750f;
+    --accent-soft: #b9750f14;
+    --accent-strong: #96600c;
+    --cyan: #1a7a91;
+    --cyan-soft: #1a7a9114;
+
+    --good: #2f8f63;
+    --warn: #b9750f;
+    --bad: #b23c2c;
+
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+body {
+  font-family: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+h1, h2, h3, h4 {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  text-wrap: balance;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+p { margin: 0; color: var(--text-secondary); }
+
+a { color: var(--cyan); }
+
+.page {
+  width: 90%;
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 0 0 120px;
+}
+
+@media (max-width: 720px) {
+  .page { width: 92%; }
+}
+
+.eyebrow {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+code, pre {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13.5px;
+}
+
+pre {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  overflow-x: auto;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+code:not(pre code) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.scroll-x {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14.5px;
+}
+
+th, td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: top;
+}
+
+th {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+td.num { font-variant-numeric: tabular-nums; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.pill.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--border)); }
+.pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
+.pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--border)); }
+
+::selection {
+  background: var(--accent);
+  color: #0e1416;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* Озвучка тексту (Web Speech API) — кнопка з'являється при наведенні */
+.tts-target {
+  position: relative;
+}
+.tts-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity .12s ease, transform .12s ease, color .12s ease, border-color .12s ease;
+  pointer-events: none;
+  z-index: 5;
+}
+.tts-target:hover .tts-btn,
+.tts-btn:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.tts-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.tts-btn.speaking {
+  opacity: 1;
+  pointer-events: auto;
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.nav-bar {
+  border-bottom: 1px solid var(--border-soft);
+}
+.nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px 0;
+  width: 90%;
+  max-width: 1560px;
+  margin: 0 auto;
+}
+.nav-brand { font-family: "JetBrains Mono", monospace; font-size: 13px; letter-spacing: 0.08em; color: var(--text-faint); }
+.nav-brand b { color: var(--text-primary); }
+.nav-links { display: flex; gap: 24px; font-family: "JetBrains Mono", monospace; font-size: 13px; }
+.nav-links a { color: var(--text-secondary); text-decoration: none; }
+.nav-links a.active { color: var(--accent); }
+.nav-links a:hover { color: var(--accent); }
+
+.hero { padding: 64px 0 8px; }
+.hero h1 { font-size: clamp(30px, 4vw, 44px); line-height: 1.14; margin-top: 14px; max-width: 18ch; }
+.hero h1 .accent { color: var(--accent); }
+.hero p.lead { margin-top: 18px; font-size: 17px; max-width: 66ch; color: var(--text-secondary); }
+
+section { margin-top: 92px; }
+section > .eyebrow { display: block; margin-bottom: 10px; }
+section h2 { font-size: 26px; margin-bottom: 6px; }
+section p.dek { color: var(--text-faint); font-size: 15px; margin-top: 8px; max-width: 70ch; }
+
+.formula-box {
+  margin-top: 18px;
+  padding: 18px 22px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 15px;
+  color: var(--accent-strong);
+  overflow-x: auto;
+}
+.formula-box .label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-top: 32px;
+}
+@media (max-width: 980px) { .pipeline { grid-template-columns: repeat(2, 1fr); } }
+.pipe-step {
+  padding: 16px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  position: relative;
+}
+.pipe-step .pipe-num { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--accent); }
+.pipe-step h4 { font-size: 13.5px; margin-top: 6px; line-height: 1.3; font-family: "JetBrains Mono", monospace; }
+.pipe-step p { font-size: 12.5px; margin-top: 6px; }
+
+.two-col { display: grid; grid-template-columns: 1.1fr 1fr; gap: 36px; margin-top: 28px; align-items: start; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+.demo-card { padding: 0; overflow: hidden; }
+.demo-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.demo-toolbar button {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.demo-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+.demo-toolbar button.primary { border-color: var(--accent); color: var(--accent); }
+.demo-toolbar .spacer { flex: 1; }
+.demo-toolbar .hint { font-size: 12px; color: var(--text-faint); font-family: "JetBrains Mono", monospace; }
+.demo-canvas-wrap { position: relative; background: var(--bg-raised); }
+#voronoiCanvas { display: block; width: 100%; height: 420px; cursor: crosshair; }
+.demo-legend {
+  display: flex;
+  gap: 18px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 12px;
+  color: var(--text-faint);
+  font-family: "JetBrains Mono", monospace;
+  flex-wrap: wrap;
+}
+.demo-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+.step-flow { display: flex; flex-direction: column; gap: 0; margin-top: 28px; }
+.step { display: grid; grid-template-columns: 44px 1fr; gap: 18px; padding: 20px 0; border-top: 1px solid var(--border-soft); }
+.step:first-child { border-top: none; }
+.step .step-num { font-family: "JetBrains Mono", monospace; font-size: 13px; color: var(--accent); padding-top: 2px; }
+.step h4 { font-size: 15.5px; margin-bottom: 6px; color: var(--text-primary); font-family: "JetBrains Mono", monospace; }
+.step p { font-size: 14.5px; }
+
+.examples-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 28px; }
+@media (max-width: 700px) { .examples-grid { grid-template-columns: 1fr; } }
+.example-item { padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.example-item .ex-name { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 14px; color: var(--text-primary); }
+.example-item .ex-desc { font-size: 13.5px; color: var(--text-secondary); margin-top: 4px; }
+
+.callout {
+  margin-top: 28px;
+  padding: 18px 22px;
+  border-left: 3px solid var(--cyan);
+  background: var(--cyan-soft);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 14.5px;
+  color: var(--text-primary);
+}
+.callout.warn { border-left-color: var(--accent); background: var(--accent-soft); }
+.callout .callout-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  display: block;
+  margin-bottom: 6px;
+}
+.callout.warn .callout-label { color: var(--accent); }
+
+footer {
+  margin-top: 100px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 13px;
+  color: var(--text-faint);
+  display: flex;
+  justify-content: space-between;
+}
+</style>
+</head>
+<body>
+
+<div class="nav-bar">
+  <nav class="nav">
+    <div class="nav-brand"><b>CarAI</b> / навчання</div>
+    <div class="nav-links">
+      <a href="01-arcade-library.html">01 · Бібліотека</a>
+      <a class="active" href="02-track-generation.html">02 · Генерація траси</a>
+    </div>
+  </nav>
+</div>
+
+<div class="page">
+
+  <div class="hero">
+    <span class="eyebrow">Крок 02 · Математика генерації</span>
+    <h1>Від хаотичних точок до <span class="accent">замкненої траси</span></h1>
+    <p class="lead">
+      Voronoi-діаграма і Delaunay-тріангуляція — дві сторони однієї монети. Разом з мінімальним каркасним деревом (MST)
+      вони перетворюють випадкові точки на площині у зв'язний граф доріг, з якого дістається унікальний,
+      відтворюваний за seed трек. Це складніший шлях, ніж spline-крива по контрольних точках, — але саме тому
+      корисніший: доведеться розібратись у справжній обчислювальній геометрії.
+    </p>
+  </div>
+
+  <section id="voronoi-def">
+    <span class="eyebrow">01 · Означення</span>
+    <h2>Що таке Voronoi-діаграма</h2>
+    <p class="dek">
+      Маємо набір точок P = {p₁, p₂, ..., pₙ} на площині — їх називають <em>sites</em>. Voronoi-діаграма ділить
+      всю площину на n комірок, по одній на кожну точку.
+    </p>
+    <div class="formula-box">
+      <span class="label">Комірка точки pᵢ</span>
+      V(pᵢ) = { x ∈ ℝ² : |x − pᵢ| ≤ |x − pⱼ| для всіх j ≠ i }
+    </div>
+    <p class="dek" style="margin-top:16px;">
+      Простими словами: комірка точки pᵢ — це всі місця на площині, для яких pᵢ найближчий сусід серед усіх точок.
+      Межа між двома сусідніми комірками — це серединний перпендикуляр відрізка pᵢpⱼ (усі точки на рівній
+      відстані від обох). Це і є формалізація твоєї інтуїції про "магнітне відштовхування" — межа справді
+      проходить рівно посередині між двома точками, що конкурують за територію.
+    </p>
+  </section>
+
+  <section id="delaunay-def">
+    <span class="eyebrow">02 · Двоюрідний брат</span>
+    <h2>Delaunay-тріангуляція та її головна властивість</h2>
+    <p class="dek">
+      Якщо дві Voronoi-комірки мають спільну межу — з'єднуємо їхні точки pᵢ, pⱼ ребром. Робимо це для всіх пар.
+      Результат — сітка трикутників, що покриває опуклу оболонку всіх точок. Це і є Delaunay-тріангуляція:
+      математично вона є <em>дуальним графом</em> до Voronoi-діаграми.
+    </p>
+    <div class="formula-box">
+      <span class="label">Empty circumcircle property (умова Делоне)</span>
+      Трикутник T належить тріангуляції Делоне ⇔ жодна інша точка з P не лежить усередині
+      описаного кола (circumcircle) трикутника T.
+    </div>
+    <p class="dek" style="margin-top:16px;">
+      Це і є той критерій, за яким комп'ютер вирішує, які трійки точок з'єднувати трикутником, а які — ні.
+      Через цю властивість Delaunay-тріангуляція максимізує мінімальний кут трикутників — уникає "голчастих",
+      витягнутих трикутників, які були б незручні для подальшої побудови дороги.
+    </p>
+    <p class="dek" style="margin-top:10px;">
+      Стандартний алгоритм побудови — <strong style="color:var(--text-primary)">Bowyer–Watson</strong>: точки додаються
+      по одній; для кожної нової точки видаляються всі трикутники, чиє коло її "проковтнуло б", а утворену
+      порожнину перетріангулюють із новою точкою. Складність — O(n log n) у середньому випадку.
+    </p>
+  </section>
+
+  <section id="demo">
+    <span class="eyebrow">03 · Інтерактив</span>
+    <h2>Постав точки — подивись, як формується граф</h2>
+    <p class="dek">Клацай на полотні, щоб додавати точки (мінімум 3). Диграма Вороного і тріангуляція Делоне
+      перебудовуються миттєво. Спробуй поставити точки по колу, а потім — хаотично, і порівняй форму трикутників.</p>
+    <p class="dek" style="margin-top:8px;">
+      <em>Спрощення демо:</em> межі Voronoi намальовані лише між сусідніми комірками всередині тріангуляції —
+      промені зовнішніх, необмежених комірок (для точок на краю фігури) тут не показані, щоб не ускладнювати картинку.
+    </p>
+
+    <div class="card demo-card" style="margin-top:28px;">
+      <div class="demo-toolbar">
+        <button id="btnRandom">розкидати 12 точок</button>
+        <button id="btnCircle">розставити по колу</button>
+        <button id="btnClear">очистити</button>
+        <div class="spacer"></div>
+        <label class="hint" style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="toggleVoronoi" checked style="accent-color:var(--accent);"> Voronoi
+        </label>
+        <label class="hint" style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="toggleDelaunay" checked style="accent-color:var(--cyan);"> Delaunay
+        </label>
+      </div>
+      <div class="demo-canvas-wrap">
+        <canvas id="voronoiCanvas"></canvas>
+      </div>
+      <div class="demo-legend">
+        <span><span class="swatch" style="background:var(--accent-strong);"></span> точки (sites)</span>
+        <span><span class="swatch" style="background:var(--cyan);"></span> ребра Delaunay</span>
+        <span><span class="swatch" style="background:var(--text-faint);"></span> межі Voronoi</span>
+        <span id="pointCount" style="margin-left:auto;">точок: 0</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="pipeline-demo">
+    <span class="eyebrow">04 · Інтерактив</span>
+    <h2>Пройди весь пайплайн крок за кроком</h2>
+    <p class="dek">Розстав власні точки (або згенеруй набір) і тисни на кроки по черзі — кожен крок домальовує
+      результат поверх попереднього, поки не з'явиться готова, згладжена й "надута" траса.</p>
+
+    <div class="card demo-card" style="margin-top:28px;">
+      <div class="demo-toolbar">
+        <button id="pRandom">нові точки</button>
+        <button id="pCircle">по колу</button>
+        <div class="spacer"></div>
+        <span class="hint" id="pStepLabel">крок 0 / 5</span>
+      </div>
+      <div class="demo-canvas-wrap">
+        <canvas id="pipelineCanvas"></canvas>
+      </div>
+      <div class="demo-toolbar" style="border-top:1px solid var(--border-soft); border-bottom:none; flex-wrap:wrap;">
+        <button id="pStep0" class="primary">0 · точки</button>
+        <button id="pStep1">1 · Delaunay</button>
+        <button id="pStep2">2 · MST</button>
+        <button id="pStep3">3 · цикл + 2-opt</button>
+        <button id="pStep4">4 · Catmull-Rom</button>
+        <button id="pStep5">5 · надута траса</button>
+      </div>
+      <div class="demo-legend" id="pipelineExplain">
+        Постав щонайменше 5 точок і обери крок 1, щоб побудувати Delaunay-тріангуляцію.
+      </div>
+    </div>
+  </section>
+
+  <section id="pipeline">
+    <span class="eyebrow">05 · Від графа до траси</span>
+    <h2>Повний пайплайн генерації — коротко</h2>
+    <p class="dek">Delaunay-граф сам по собі — це занадто багато з'єднань (кожна точка сполучена з кількома
+      сусідами). Трек має бути одним замкненим циклом. П'ять кроків, які це вирішують.</p>
+
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="pipe-num">01</div>
+        <h4>Розкидати точки</h4>
+        <p>Case-точки на seed-based випадковій сітці. Poisson disk sampling — щоб уникнути купчення точок за метр одна від одної.</p>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-num">02</div>
+        <h4>Delaunay-тріангуляція</h4>
+        <p>Bowyer–Watson будує сітку трикутників — граф "природних сусідів" між точками.</p>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-num">03</div>
+        <h4>Мінімальне каркасне дерево</h4>
+        <p>Алгоритм Прима чи Крускала знаходить MST — мінімальний набір ребер, що з'єднує всі точки без циклів.</p>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-num">04</div>
+        <h4>Обхід дерева → цикл, потім 2-opt</h4>
+        <p>DFS-обхід MST дає послідовність, що відвідує кожну точку рівно раз (той самий трюк, що і в наближеному
+          розв'язку задачі комівояжера). Потім 2-opt прибирає самоперетини, які цей "наївний" обхід реально створює.</p>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-num">05</div>
+        <h4>Згладити й "надути"</h4>
+        <p>Готовий цикл точок прогнати через Catmull-Rom для плавності, потім побудувати два офсетні контури ліворуч/праворуч як межі асфальту.</p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-label">Твоє застереження про самоперетини — і чому перша відповідь була неточною</span>
+      Спершу здавалось, що раз ребра походять з планарного (непересічного) Delaunay-графу, то й довільний
+      цикл із цих ребер теж не перетинається "безкоштовно". <strong style="color:var(--text-primary)">Це виявилось
+      невірним</strong>: перевірка на 100 випадкових наборах точок показала самоперетини у 98 з них
+      після кроку "обхід дерева". Причина — обхід дерева обирає ребра за структурою дерева, а не за
+      геометричним взаємним розташуванням, тож може "стрибати" через уже пройдену ділянку.
+      Реальне рішення — крок <strong style="color:var(--text-primary)">2-opt</strong>: поки в циклі є два
+      ребра, що перетинаються, — розвернути ділянку шляху між ними. Кожен такий розворот гарантовано
+      прибирає саме цей перетин і не додає нових. Перевірено: після 2-opt перетинів не залишилось у жодному
+      зі 100 тестів.
+    </div>
+  </section>
+
+  <section id="mst">
+    <span class="eyebrow">06 · Чому саме MST</span>
+    <h2>Мінімальне каркасне дерево — коротко і формально</h2>
+    <p class="dek">Delaunay-граф зв'язний, але надлишковий: за формулою Ейлера для планарних графів у ньому
+      приблизно 3n − 3 − h ребер (n — кількість точок, h — точок на опуклій оболонці) — для типової траси
+      з 20-40 точок це означає ребер у ~2.5-2.7 раза більше, ніж самих точок. Для замкненого треку потрібен
+      один цикл, а не така густа сітка.</p>
+    <div class="formula-box">
+      <span class="label">Мінімальне каркасне дерево (MST)</span>
+      Для зваженого графа G = (V, E), де вага ребра w(pᵢ, pⱼ) = |pᵢ − pⱼ|,<br>
+      MST — це піддерево T ⊆ E, що з'єднує всі вершини V, з мінімальною сумою ваг Σw(e), e ∈ T.
+    </div>
+    <p class="dek" style="margin-top:16px;">
+      <strong style="color:var(--text-primary)">Алгоритм Прима</strong> будує MST "нарощуванням" від однієї точки:
+      на кожному кроці додає найдешевше ребро, що з'єднує вже включене дерево з новою, ще не включеною точкою.
+      Простий у реалізації на масиві відстаней — підходить, коли точок не надто багато (типовий розмір траси:
+      15–40 точок).
+    </p>
+    <p class="dek" style="margin-top:10px;">
+      MST дає дерево (n−1 ребро, без циклів). Крок "поверни частину циклів" — це навмисне порушення MST:
+      з решти Delaunay-ребер (тих, що MST відкинув) обираються ті, що формують один суцільний контур навколо
+      периметра — і саме цей контур стає центральною лінією траси.
+    </p>
+  </section>
+
+  <section id="examples">
+    <span class="eyebrow">З практики</span>
+    <h2>Де цей самий пайплайн вже використовують</h2>
+    <div class="examples-grid">
+      <div class="example-item">
+        <div class="ex-name">Procedural dungeon generation (Delaunay + MST)</div>
+        <div class="ex-desc">Задокументований підхід: центри кімнат тріангулюються Делоне, зводяться до MST для
+          гарантованої зв'язності, потім вибірково повертаються "зайві" ребра — щоб з'явились цикли й альтернативні
+          шляхи замість занудного дерева-лабіринту. Той самий крок 04, що і в треку.</div>
+      </div>
+      <div class="example-item">
+        <div class="ex-name">Voronoi/Delaunay для playable cave systems</div>
+        <div class="ex-desc">Дослідницька робота (IEEE) з процедурної генерації прохідних печерних систем на
+          основі тих самих двох структур — підтверджує, що пара Voronoi + Delaunay є усталеним інструментом
+          генерації ігрового простору, не лише трас.</div>
+      </div>
+      <div class="example-item">
+        <div class="ex-name">Centerline generation для дорожніх мереж (патенти)</div>
+        <div class="ex-desc">Промислові системи генерації "центральних ліній" дорожньої мережі використовують
+          Voronoi-полігони на межах форми, об'єднання сусідніх полігонів і побудову центральної лінії — той самий
+          принцип "скелету", який ти застосуєш до траси.</div>
+      </div>
+      <div class="example-item">
+        <div class="ex-name">scipy.spatial.Delaunay / scipy.spatial.Voronoi</div>
+        <div class="ex-desc">Готові, перевірені реалізації обох структур у Python — коли дійдемо до коду,
+          не обов'язково писати Bowyer–Watson з нуля; можна побудувати граф на scipy і зосередитись на
+          MST-логіці й формуванні траси.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="next">
+    <span class="eyebrow">Далі</span>
+    <h2>Що знадобиться, коли перейдемо до коду</h2>
+    <div class="step-flow">
+      <div class="step">
+        <div class="step-num">→</div>
+        <div>
+          <h4>numpy + scipy.spatial</h4>
+          <p>Delaunay-тріангуляція та Voronoi-діаграма — готові, оптимізовані реалізації, не треба писати Bowyer–Watson руками з нуля (хоча корисно розуміти, що відбувається під капотом — саме тому ця сторінка з формулами).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">→</div>
+        <div>
+          <h4>Seed-based генератор точок</h4>
+          <p><code>numpy.random.default_rng(seed)</code> — детермінований генератор, який за тим самим числом завжди видає той самий набір точок і, відповідно, ту саму трасу.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">→</div>
+        <div>
+          <h4>Catmull-Rom для згладжування</h4>
+          <p>Після відбору циклу точок з MST + re-loop — та сама крива, яку ти вже розумієш зі spline-підходу, тут використовується не для генерації форми "з нуля", а для згладжування вже готового скелету.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>CarAI · навчальні матеріали · не є частиною коду гри</span>
+    <span>02 / 02</span>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  const canvas = document.getElementById('voronoiCanvas');
+  const ctx = canvas.getContext('2d');
+  const pointCountEl = document.getElementById('pointCount');
+  const toggleVoronoi = document.getElementById('toggleVoronoi');
+  const toggleDelaunay = document.getElementById('toggleDelaunay');
+
+  // Точки зберігаються в нормалізованих координатах (0..1),
+  // щоб при зміні розміру вікна не "з'їжджати" відносно полотна.
+  let normPoints = [];
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    draw();
+  }
+
+  function cssSize() {
+    const rect = canvas.getBoundingClientRect();
+    return { w: rect.width, h: rect.height };
+  }
+
+  function absolutePoints() {
+    const { w, h } = cssSize();
+    return normPoints.map(p => [p[0] * w, p[1] * h]);
+  }
+
+  // --- Delaunay via Bowyer-Watson ---
+  function circumcircle(a, b, c) {
+    const ax = a[0], ay = a[1], bx = b[0], by = b[1], cx = c[0], cy = c[1];
+    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+    if (Math.abs(d) < 1e-9) return null;
+    const ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d;
+    const uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d;
+    const r2 = (ux - ax) * (ux - ax) + (uy - ay) * (uy - ay);
+    return { x: ux, y: uy, r2: r2 };
+  }
+
+  function bowyerWatson(pts) {
+    if (pts.length < 3) return [];
+    const margin = 1e5;
+    const superTri = [
+      [-margin, -margin], [margin, -margin], [0, margin]
+    ];
+    let triangles = [[superTri[0], superTri[1], superTri[2]]];
+
+    for (const p of pts) {
+      let badTriangles = [];
+      for (const t of triangles) {
+        const cc = circumcircle(t[0], t[1], t[2]);
+        if (!cc) continue;
+        const dx = p[0] - cc.x, dy = p[1] - cc.y;
+        if (dx * dx + dy * dy <= cc.r2 + 1e-7) badTriangles.push(t);
+      }
+      let polygon = [];
+      for (const t of badTriangles) {
+        const edges = [[t[0], t[1]], [t[1], t[2]], [t[2], t[0]]];
+        for (const e of edges) {
+          let shared = false;
+          for (const t2 of badTriangles) {
+            if (t2 === t) continue;
+            const e2s = [[t2[0], t2[1]], [t2[1], t2[2]], [t2[2], t2[0]]];
+            for (const e2 of e2s) {
+              if ((e[0] === e2[0] && e[1] === e2[1]) || (e[0] === e2[1] && e[1] === e2[0])) shared = true;
+            }
+          }
+          if (!shared) polygon.push(e);
+        }
+      }
+      triangles = triangles.filter(t => !badTriangles.includes(t));
+      for (const e of polygon) {
+        triangles.push([e[0], e[1], p]);
+      }
+    }
+
+    triangles = triangles.filter(t =>
+      !t.some(v => superTri.includes(v))
+    );
+    return triangles;
+  }
+
+  function draw() {
+    const { w, h } = cssSize();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg-raised').trim();
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = bg || '#141b1e';
+    ctx.fillRect(0, 0, w, h);
+
+    const accentStrong = getComputedStyle(document.documentElement).getPropertyValue('--accent-strong').trim();
+    const cyan = getComputedStyle(document.documentElement).getPropertyValue('--cyan').trim();
+    const faint = getComputedStyle(document.documentElement).getPropertyValue('--text-faint').trim();
+
+    const points = absolutePoints();
+    pointCountEl.textContent = 'точок: ' + points.length;
+
+    if (points.length >= 3) {
+      const triangles = bowyerWatson(points);
+
+      if (toggleVoronoi.checked) {
+        // Voronoi edges = connect circumcenters of adjacent triangles
+        ctx.strokeStyle = faint;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 4]);
+        for (let i = 0; i < triangles.length; i++) {
+          const cc1 = circumcircle(triangles[i][0], triangles[i][1], triangles[i][2]);
+          if (!cc1) continue;
+          for (let j = i + 1; j < triangles.length; j++) {
+            const shared = sharedEdgeCount(triangles[i], triangles[j]);
+            if (shared === 2) {
+              const cc2 = circumcircle(triangles[j][0], triangles[j][1], triangles[j][2]);
+              if (!cc2) continue;
+              ctx.beginPath();
+              ctx.moveTo(cc1.x, cc1.y);
+              ctx.lineTo(cc2.x, cc2.y);
+              ctx.stroke();
+            }
+          }
+        }
+        ctx.setLineDash([]);
+      }
+
+      if (toggleDelaunay.checked) {
+        ctx.strokeStyle = cyan;
+        ctx.lineWidth = 1.3;
+        ctx.globalAlpha = 0.85;
+        for (const t of triangles) {
+          ctx.beginPath();
+          ctx.moveTo(t[0][0], t[0][1]);
+          ctx.lineTo(t[1][0], t[1][1]);
+          ctx.lineTo(t[2][0], t[2][1]);
+          ctx.closePath();
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    ctx.fillStyle = accentStrong || '#ffb84d';
+    for (const p of points) {
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function sharedEdgeCount(t1, t2) {
+    let count = 0;
+    for (const v1 of t1) {
+      for (const v2 of t2) {
+        if (v1 === v2) count++;
+      }
+    }
+    return count;
+  }
+
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    normPoints.push([x, y]);
+    draw();
+  });
+
+  document.getElementById('btnClear').addEventListener('click', () => {
+    normPoints = [];
+    draw();
+  });
+
+  document.getElementById('btnRandom').addEventListener('click', () => {
+    normPoints = [];
+    const margin = 0.08;
+    for (let i = 0; i < 12; i++) {
+      normPoints.push([margin + Math.random() * (1 - 2 * margin), margin + Math.random() * (1 - 2 * margin)]);
+    }
+    draw();
+  });
+
+  document.getElementById('btnCircle').addEventListener('click', () => {
+    normPoints = [];
+    const baseR = 0.32;
+    const n = 10;
+    for (let i = 0; i < n; i++) {
+      const angle = (i / n) * Math.PI * 2;
+      const r = baseR * (0.75 + Math.random() * 0.5);
+      normPoints.push([0.5 + Math.cos(angle) * r, 0.5 + Math.sin(angle) * r]);
+    }
+    draw();
+  });
+
+  toggleVoronoi.addEventListener('change', draw);
+  toggleDelaunay.addEventListener('change', draw);
+
+  window.addEventListener('resize', resize);
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  resize();
+  document.getElementById('btnCircle').click();
+})();
+</script>
+
+<script>
+// --- Демо 2: покроковий пайплайн (Delaunay -> MST -> цикл -> 2-opt -> Catmull-Rom -> надута траса) ---
+(function () {
+  const canvas = document.getElementById('pipelineCanvas');
+  const ctx = canvas.getContext('2d');
+  const stepLabel = document.getElementById('pStepLabel');
+  const explainEl = document.getElementById('pipelineExplain');
+  const stepButtons = [0,1,2,3,4,5].map(i => document.getElementById('pStep' + i));
+
+  let normPoints = [];
+  let currentStep = 0;
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  const explanations = [
+    'Постав щонайменше 5 точок і обери крок 1, щоб побудувати Delaunay-тріангуляцію.',
+    'Delaunay-тріангуляція: сітка "природних сусідів" — надто густа, щоб бути трасою напряму.',
+    'Мінімальне каркасне дерево (жовтогаряче): найкоротший набір ребер, що з\'єднує всі точки без циклів.',
+    'DFS-обхід дерева перетворений на цикл, потім 2-opt прибрав самоперетини (порівняй із кроком 2 — форма випросталась).',
+    'Catmull-Rom згладив ламаний цикл у плавну криву, що проходить точно через кожну точку.',
+    'Готова траса: два офсетні контури обабіч згладженої лінії утворюють полотно асфальту.'
+  ];
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    draw();
+  }
+  function cssSize() {
+    const rect = canvas.getBoundingClientRect();
+    return { w: rect.width, h: rect.height };
+  }
+  function absolutePoints() {
+    const { w, h } = cssSize();
+    return normPoints.map(p => [p[0] * w, p[1] * h]);
+  }
+
+  // --- перевірені алгоритми (ті самі, що в demo 1, плюс MST/цикл/2-opt/spline) ---
+  function circumcircle(a, b, c) {
+    const ax=a[0],ay=a[1],bx=b[0],by=b[1],cx=c[0],cy=c[1];
+    const d = 2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by));
+    if (Math.abs(d) < 1e-9) return null;
+    const ux = ((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/d;
+    const uy = ((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/d;
+    const r2 = (ux-ax)*(ux-ax)+(uy-ay)*(uy-ay);
+    return { x: ux, y: uy, r2 };
+  }
+  function bowyerWatson(pts) {
+    if (pts.length < 3) return [];
+    const margin = 1e5;
+    const superTri = [[-margin,-margin],[margin,-margin],[0,margin]];
+    let triangles = [[superTri[0],superTri[1],superTri[2]]];
+    for (const p of pts) {
+      let badTriangles = [];
+      for (const t of triangles) {
+        const cc = circumcircle(t[0],t[1],t[2]);
+        if (!cc) continue;
+        const dx=p[0]-cc.x, dy=p[1]-cc.y;
+        if (dx*dx+dy*dy <= cc.r2 + 1e-7) badTriangles.push(t);
+      }
+      let polygon = [];
+      for (const t of badTriangles) {
+        const edges = [[t[0],t[1]],[t[1],t[2]],[t[2],t[0]]];
+        for (const e of edges) {
+          let shared = false;
+          for (const t2 of badTriangles) {
+            if (t2 === t) continue;
+            const e2s = [[t2[0],t2[1]],[t2[1],t2[2]],[t2[2],t2[0]]];
+            for (const e2 of e2s) {
+              if ((e[0]===e2[0]&&e[1]===e2[1])||(e[0]===e2[1]&&e[1]===e2[0])) shared = true;
+            }
+          }
+          if (!shared) polygon.push(e);
+        }
+      }
+      triangles = triangles.filter(t => !badTriangles.includes(t));
+      for (const e of polygon) triangles.push([e[0], e[1], p]);
+    }
+    return triangles.filter(t => !t.some(v => superTri.includes(v)));
+  }
+  function bowyerWatsonIndexed(pts) {
+    const triangles = bowyerWatson(pts);
+    const indexOf = new Map();
+    pts.forEach((p,i) => indexOf.set(p,i));
+    return triangles.map(t => t.map(p => indexOf.get(p)));
+  }
+  function buildEdgeSet(trianglesIdx) {
+    const edges = new Set();
+    for (const t of trianglesIdx) {
+      const pairs = [[t[0],t[1]],[t[1],t[2]],[t[2],t[0]]];
+      for (let [a,b] of pairs) { if (a>b) [a,b]=[b,a]; edges.add(a+'-'+b); }
+    }
+    return [...edges].map(s => s.split('-').map(Number));
+  }
+  function dist(pts,i,j) {
+    const dx=pts[i][0]-pts[j][0], dy=pts[i][1]-pts[j][1];
+    return Math.sqrt(dx*dx+dy*dy);
+  }
+  function primMST(pts, edges) {
+    const n = pts.length;
+    const adj = Array.from({length:n}, () => []);
+    for (const [a,b] of edges) {
+      const w = dist(pts,a,b);
+      adj[a].push([b,w]); adj[b].push([a,w]);
+    }
+    const inTree = new Array(n).fill(false);
+    const mstEdges = [];
+    const mstAdj = Array.from({length:n}, () => []);
+    inTree[0] = true;
+    let count = 1;
+    while (count < n) {
+      let best = null, bestW = Infinity;
+      for (let u=0; u<n; u++) {
+        if (!inTree[u]) continue;
+        for (const [v,w] of adj[u]) {
+          if (!inTree[v] && w < bestW) { bestW = w; best = [u,v]; }
+        }
+      }
+      if (!best) break;
+      inTree[best[1]] = true;
+      mstEdges.push(best);
+      mstAdj[best[0]].push(best[1]);
+      mstAdj[best[1]].push(best[0]);
+      count++;
+    }
+    return { mstEdges, mstAdj };
+  }
+  function treeToCycle(n, mstAdj, root) {
+    const visited = new Array(n).fill(false);
+    const order = [];
+    (function dfs(u) {
+      visited[u] = true;
+      order.push(u);
+      const neighbors = [...mstAdj[u]].sort((a,b) => a-b);
+      for (const v of neighbors) if (!visited[v]) dfs(v);
+    })(root);
+    return order;
+  }
+  function segmentsIntersect(p1,p2,p3,p4) {
+    function ccw(a,b,c){ return (c[1]-a[1])*(b[0]-a[0]) - (b[1]-a[1])*(c[0]-a[0]); }
+    const d1=ccw(p3,p4,p1), d2=ccw(p3,p4,p2), d3=ccw(p1,p2,p3), d4=ccw(p1,p2,p4);
+    return ((d1>0&&d2<0)||(d1<0&&d2>0)) && ((d3>0&&d4<0)||(d3<0&&d4>0));
+  }
+  function removeCrossings(pts, cycle) {
+    const n = cycle.length;
+    let improved = true, iterations = 0;
+    while (improved && iterations < 500) {
+      improved = false; iterations++;
+      outer:
+      for (let i=0; i<n; i++) {
+        for (let j=i+2; j<n; j++) {
+          if (i===0 && j===n-1) continue;
+          const a1=pts[cycle[i]], a2=pts[cycle[(i+1)%n]];
+          const b1=pts[cycle[j]], b2=pts[cycle[(j+1)%n]];
+          if (segmentsIntersect(a1,a2,b1,b2)) {
+            let lo=i+1, hi=j;
+            while (lo<hi) { [cycle[lo],cycle[hi]]=[cycle[hi],cycle[lo]]; lo++; hi--; }
+            improved = true;
+            break outer;
+          }
+        }
+      }
+    }
+    return cycle;
+  }
+  function catmullRom(p0,p1,p2,p3,t) {
+    const t2=t*t, t3=t2*t;
+    const x = 0.5*((2*p1[0]) + (-p0[0]+p2[0])*t + (2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2 + (-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3);
+    const y = 0.5*((2*p1[1]) + (-p0[1]+p2[1])*t + (2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2 + (-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3);
+    return [x,y];
+  }
+  function smoothClosedLoop(pts, samplesPerSeg) {
+    const n = pts.length;
+    const out = [];
+    for (let i=0; i<n; i++) {
+      const p0=pts[(i-1+n)%n], p1=pts[i], p2=pts[(i+1)%n], p3=pts[(i+2)%n];
+      for (let s=0; s<samplesPerSeg; s++) out.push(catmullRom(p0,p1,p2,p3, s/samplesPerSeg));
+    }
+    return out;
+  }
+  function offsetLoop(pts, width) {
+    const n = pts.length;
+    const left = [], right = [];
+    for (let i=0; i<n; i++) {
+      const prev = pts[(i-1+n)%n], next = pts[(i+1)%n];
+      let tx = next[0]-prev[0], ty = next[1]-prev[1];
+      const len = Math.hypot(tx,ty) || 1;
+      tx/=len; ty/=len;
+      const nx = -ty, ny = tx;
+      left.push([pts[i][0]+nx*width, pts[i][1]+ny*width]);
+      right.push([pts[i][0]-nx*width, pts[i][1]-ny*width]);
+    }
+    return { left, right };
+  }
+
+  // --- обчислення для поточних точок (кешується на набір точок) ---
+  let cache = null;
+  function computeAll() {
+    const pts = absolutePoints();
+    if (pts.length < 5) return null;
+    const trianglesIdx = bowyerWatsonIndexed(pts);
+    const allEdges = buildEdgeSet(trianglesIdx);
+    const { mstEdges, mstAdj } = primMST(pts, allEdges);
+    let cycleIdx = treeToCycle(pts.length, mstAdj, 0);
+    cycleIdx = removeCrossings(pts, cycleIdx.slice());
+    const cyclePts = cycleIdx.map(i => pts[i]);
+    const smooth = smoothClosedLoop(cyclePts, 12);
+    const { left, right } = offsetLoop(smooth, 22);
+    return { pts, trianglesIdx, mstEdges, cyclePts, smooth, left, right };
+  }
+
+  function colorVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+
+  function draw() {
+    const { w, h } = cssSize();
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = colorVar('--bg-raised', '#141b1e');
+    ctx.fillRect(0,0,w,h);
+
+    const accent = colorVar('--accent-strong', '#ffb84d');
+    const cyan = colorVar('--cyan', '#4fb2c7');
+    const good = colorVar('--good', '#5fbf8f');
+    const faint = colorVar('--text-faint', '#5c7075');
+    const border = colorVar('--border', '#263135');
+
+    const pts = absolutePoints();
+
+    if (pts.length >= 5 && currentStep >= 1) {
+      if (!cache) cache = computeAll();
+    } else {
+      cache = null;
+    }
+
+    if (currentStep >= 1 && cache) {
+      ctx.strokeStyle = cyan;
+      ctx.lineWidth = 1.1;
+      ctx.globalAlpha = currentStep === 1 ? 0.9 : 0.25;
+      for (const t of cache.trianglesIdx) {
+        const [a,b,c] = t.map(i => cache.pts[i]);
+        ctx.beginPath();
+        ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.lineTo(c[0],c[1]);
+        ctx.closePath(); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    if (currentStep === 2 && cache) {
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2.4;
+      for (const [a,b] of cache.mstEdges) {
+        const pa = cache.pts[a], pb = cache.pts[b];
+        ctx.beginPath();
+        ctx.moveTo(pa[0],pa[1]); ctx.lineTo(pb[0],pb[1]);
+        ctx.stroke();
+      }
+    }
+
+    if (currentStep === 3 && cache) {
+      ctx.strokeStyle = good;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      cache.cyclePts.forEach((p,i) => i===0 ? ctx.moveTo(p[0],p[1]) : ctx.lineTo(p[0],p[1]));
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    if (currentStep >= 4 && cache) {
+      ctx.strokeStyle = good;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      cache.smooth.forEach((p,i) => i===0 ? ctx.moveTo(p[0],p[1]) : ctx.lineTo(p[0],p[1]));
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    if (currentStep === 5 && cache) {
+      ctx.fillStyle = colorVar('--accent-soft', 'rgba(232,163,61,0.1)');
+      ctx.strokeStyle = border;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      cache.left.forEach((p,i) => i===0 ? ctx.moveTo(p[0],p[1]) : ctx.lineTo(p[0],p[1]));
+      ctx.closePath();
+      for (let i=cache.right.length-1; i>=0; i--) ctx.lineTo(cache.right[i][0], cache.right[i][1]);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = accent;
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], 4, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    stepLabel.textContent = 'крок ' + currentStep + ' / 5';
+    explainEl.textContent = explanations[currentStep];
+    stepButtons.forEach((btn,i) => btn.classList.toggle('primary', i === currentStep));
+  }
+
+  function setStep(n) {
+    const pts = absolutePoints();
+    if (n >= 1 && pts.length < 5) {
+      explainEl.textContent = 'Потрібно щонайменше 5 точок для тріангуляції. Постав ще точок або згенеруй набір.';
+      return;
+    }
+    currentStep = n;
+    draw();
+  }
+
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    normPoints.push([(e.clientX-rect.left)/rect.width, (e.clientY-rect.top)/rect.height]);
+    cache = null;
+    currentStep = 0;
+    draw();
+  });
+
+  document.getElementById('pRandom').addEventListener('click', () => {
+    normPoints = [];
+    const margin = 0.1;
+    const n = 10 + Math.floor(Math.random()*6);
+    for (let i=0; i<n; i++) normPoints.push([margin+Math.random()*(1-2*margin), margin+Math.random()*(1-2*margin)]);
+    cache = null; currentStep = 0; draw();
+  });
+
+  document.getElementById('pCircle').addEventListener('click', () => {
+    normPoints = [];
+    const n = 12, baseR = 0.32;
+    for (let i=0; i<n; i++) {
+      const angle = (i/n)*Math.PI*2;
+      const r = baseR*(0.7+Math.random()*0.55);
+      normPoints.push([0.5+Math.cos(angle)*r, 0.5+Math.sin(angle)*r]);
+    }
+    cache = null; currentStep = 0; draw();
+  });
+
+  stepButtons.forEach((btn,i) => btn.addEventListener('click', () => setStep(i)));
+
+  window.addEventListener('resize', resize);
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  resize();
+  document.getElementById('pCircle').click();
+})();
+</script>
+
+<script>
+// Озвучка тексту через Web Speech API (assets/tts.js)
+(function () {
+  if (!('speechSynthesis' in window)) return;
+  const synth = window.speechSynthesis;
+  let voice = null;
+
+  function pickVoice() {
+    const voices = synth.getVoices();
+    if (!voices.length) return null;
+    const priority = ['uk', 'ru', 'en'];
+    for (const langPrefix of priority) {
+      const found = voices.find(v => v.lang.toLowerCase().startsWith(langPrefix));
+      if (found) return found;
+    }
+    return voices[0];
+  }
+
+  function ensureVoice(cb) {
+    if (voice) { cb(voice); return; }
+    voice = pickVoice();
+    if (voice) { cb(voice); return; }
+    synth.addEventListener('voiceschanged', function onChange() {
+      voice = pickVoice();
+      synth.removeEventListener('voiceschanged', onChange);
+      if (voice) cb(voice);
+    });
+  }
+
+  let currentUtterance = null;
+
+  function speak(text, btn) {
+    if (synth.speaking) {
+      synth.cancel();
+      if (btn) btn.classList.remove('speaking');
+      if (currentUtterance && currentUtterance.__btn === btn) { currentUtterance = null; return; }
+    }
+    ensureVoice((v) => {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.voice = v;
+      utter.lang = v.lang;
+      utter.rate = 1.0;
+      utter.__btn = btn;
+      utter.onstart = () => btn && btn.classList.add('speaking');
+      utter.onend = () => btn && btn.classList.remove('speaking');
+      utter.onerror = () => btn && btn.classList.remove('speaking');
+      currentUtterance = utter;
+      synth.speak(utter);
+    });
+  }
+
+  function makeButton(targetEl) {
+    const btn = document.createElement('button');
+    btn.className = 'tts-btn';
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Озвучити текст');
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+      '<path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/>' +
+      '<path d="M16.5 8.5a5 5 0 0 1 0 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>' +
+      '<path d="M19 6a9 9 0 0 1 0 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.6"/>' +
+      '</svg>';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const text = targetEl.innerText || targetEl.textContent;
+      speak(text.trim(), btn);
+    });
+    return btn;
+  }
+
+  function wrapTarget(el) {
+    if (el.dataset.ttsWrapped) return;
+    if (!el.textContent || el.textContent.trim().length < 12) return;
+    el.dataset.ttsWrapped = '1';
+    el.classList.add('tts-target');
+    el.appendChild(makeButton(el));
+  }
+
+  function init() {
+    const selectors = [
+      'section p.dek', '.card p', '.formula-box', '.callout',
+      '.step p', '.lib-card ul li', '.example-item .ex-desc', '.pipe-step p'
+    ];
+    document.querySelectorAll(selectors.join(',')).forEach(wrapTarget);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

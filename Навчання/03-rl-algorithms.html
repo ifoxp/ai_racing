@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>RL-алгоритми — вибір для CarAI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* CarAI — навчальний портал: спільні дизайн-токени (inline, self-contained) */
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: local("JetBrains Mono"), local("JetBrainsMono-Regular");
+  font-weight: 400 800;
+}
+
+:root {
+  --bg: #0e1416;
+  --bg-raised: #141b1e;
+  --bg-card: #171f22;
+  --border: #263135;
+  --border-soft: #1c2528;
+
+  --text-primary: #dfe7e9;
+  --text-secondary: #93a7ac;
+  --text-faint: #5c7075;
+
+  --accent: #e8a33d;
+  --accent-soft: #e8a33d1a;
+  --accent-strong: #ffb84d;
+  --cyan: #4fb2c7;
+  --cyan-soft: #4fb2c71a;
+
+  --good: #5fbf8f;
+  --warn: #e8a33d;
+  --bad: #d8695a;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f5f3ee;
+  --bg-raised: #ffffff;
+  --bg-card: #ffffff;
+  --border: #ddd7c9;
+  --border-soft: #e8e3d6;
+
+  --text-primary: #23201a;
+  --text-secondary: #5c5648;
+  --text-faint: #948d7a;
+
+  --accent: #b9750f;
+  --accent-soft: #b9750f14;
+  --accent-strong: #96600c;
+  --cyan: #1a7a91;
+  --cyan-soft: #1a7a9114;
+
+  --good: #2f8f63;
+  --warn: #b9750f;
+  --bad: #b23c2c;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f3ee;
+    --bg-raised: #ffffff;
+    --bg-card: #ffffff;
+    --border: #ddd7c9;
+    --border-soft: #e8e3d6;
+
+    --text-primary: #23201a;
+    --text-secondary: #5c5648;
+    --text-faint: #948d7a;
+
+    --accent: #b9750f;
+    --accent-soft: #b9750f14;
+    --accent-strong: #96600c;
+    --cyan: #1a7a91;
+    --cyan-soft: #1a7a9114;
+
+    --good: #2f8f63;
+    --warn: #b9750f;
+    --bad: #b23c2c;
+
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+body {
+  font-family: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  text-wrap: balance;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+p { margin: 0; color: var(--text-secondary); }
+a { color: var(--cyan); }
+
+.page {
+  width: 90%;
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 0 0 120px;
+}
+@media (max-width: 720px) { .page { width: 92%; } }
+
+.nav-bar { border-bottom: 1px solid var(--border-soft); }
+.nav {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 22px 0; width: 90%; max-width: 1560px; margin: 0 auto;
+}
+.nav-brand { font-family: "JetBrains Mono", monospace; font-size: 13px; letter-spacing: 0.08em; color: var(--text-faint); }
+.nav-brand b { color: var(--text-primary); }
+.nav-links { display: flex; gap: 24px; font-family: "JetBrains Mono", monospace; font-size: 13px; }
+.nav-links a { color: var(--text-secondary); text-decoration: none; }
+.nav-links a.active { color: var(--accent); }
+.nav-links a:hover { color: var(--accent); }
+
+.eyebrow {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--accent); font-weight: 600;
+}
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; }
+
+code, pre { font-family: "JetBrains Mono", monospace; font-size: 13.5px; }
+pre {
+  background: var(--bg-raised); border: 1px solid var(--border-soft); border-radius: var(--radius);
+  padding: 16px 18px; overflow-x: auto; line-height: 1.55; color: var(--text-primary);
+}
+code:not(pre code) { background: var(--accent-soft); color: var(--accent-strong); padding: 1px 6px; border-radius: 4px; }
+
+.scroll-x { overflow-x: auto; }
+
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+th {
+  font-family: "JetBrains Mono", monospace; font-size: 11.5px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-faint); font-weight: 600;
+}
+td.num { font-variant-numeric: tabular-nums; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: "JetBrains Mono", monospace; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary);
+}
+.pill.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--border)); }
+.pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
+.pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--border)); }
+
+::selection { background: var(--accent); color: #0e1416; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; } }
+
+.tts-target { position: relative; }
+.tts-btn {
+  position: absolute; top: -6px; right: -6px; width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-faint);
+  cursor: pointer; opacity: 0; transform: translateY(-2px);
+  transition: opacity .12s ease, transform .12s ease, color .12s ease, border-color .12s ease;
+  pointer-events: none; z-index: 5;
+}
+.tts-target:hover .tts-btn, .tts-btn:focus-visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.tts-btn:hover { color: var(--accent); border-color: var(--accent); }
+.tts-btn.speaking { opacity: 1; pointer-events: auto; color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+/* --- page-specific --- */
+.hero { padding: 64px 0 8px; }
+.hero h1 { font-size: clamp(30px, 4vw, 44px); line-height: 1.14; margin-top: 14px; max-width: 22ch; }
+.hero h1 .accent { color: var(--accent); }
+.hero p.lead { margin-top: 18px; font-size: 17px; max-width: 68ch; color: var(--text-secondary); }
+
+section { margin-top: 92px; }
+section > .eyebrow { display: block; margin-bottom: 10px; }
+section h2 { font-size: 26px; margin-bottom: 6px; }
+section p.dek { color: var(--text-faint); font-size: 15px; margin-top: 8px; max-width: 72ch; }
+
+.axis-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 28px;
+}
+@media (max-width: 900px) { .axis-grid { grid-template-columns: 1fr; } }
+.axis-card { padding: 20px; }
+.axis-card h4 { font-size: 14px; color: var(--accent); margin-bottom: 8px; }
+.axis-card p { font-size: 14px; }
+
+.family-block { margin-top: 40px; }
+.family-header {
+  display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; flex-wrap: wrap;
+}
+.family-header h3 { font-size: 20px; }
+.family-header .tag {
+  font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: 0.06em;
+  color: var(--text-faint); text-transform: uppercase;
+}
+
+.algo-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+@media (max-width: 900px) { .algo-grid { grid-template-columns: 1fr; } }
+
+.algo-card {
+  padding: 22px; border-radius: var(--radius-lg); border: 1px solid var(--border);
+  background: var(--bg-card); display: flex; flex-direction: column; gap: 12px;
+}
+.algo-card.year-marker { border-style: dashed; }
+.algo-card .algo-name {
+  font-family: "JetBrains Mono", monospace; font-size: 17px; font-weight: 700;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+}
+.algo-card .algo-year { font-size: 12px; color: var(--text-faint); font-weight: 400; }
+.algo-card .algo-desc { font-size: 14px; color: var(--text-secondary); }
+.algo-card .sub-label {
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint);
+  font-family: "JetBrains Mono", monospace; margin-bottom: 4px;
+}
+.algo-card ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--text-secondary); line-height: 1.7; }
+.algo-card ul.pros li::marker { color: var(--good); }
+.algo-card ul.cons li::marker { color: var(--bad); }
+.fit-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+.matrix-wrap { margin-top: 28px; }
+
+.callout {
+  margin-top: 28px; padding: 18px 22px; border-left: 3px solid var(--cyan);
+  background: var(--cyan-soft); border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 14.5px; color: var(--text-primary);
+}
+.callout.warn { border-left-color: var(--accent); background: var(--accent-soft); }
+.callout .callout-label {
+  font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--cyan); display: block; margin-bottom: 6px;
+}
+.callout.warn .callout-label { color: var(--accent); }
+
+.decision-tree { margin-top: 28px; }
+.dt-node {
+  padding: 16px 20px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-card); margin-bottom: 10px; font-size: 14.5px;
+}
+.dt-node .dt-q { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--accent); margin-bottom: 6px; }
+
+footer {
+  margin-top: 100px; padding-top: 24px; border-top: 1px solid var(--border-soft);
+  font-size: 13px; color: var(--text-faint); display: flex; justify-content: space-between;
+}
+</style>
+</head>
+<body>
+
+<div class="nav-bar">
+  <nav class="nav">
+    <div class="nav-brand"><b>CarAI</b> / навчання</div>
+    <div class="nav-links">
+      <a href="01-arcade-library.html">01 · Бібліотека</a>
+      <a href="02-track-generation.html">02 · Генерація траси</a>
+      <a class="active" href="03-rl-algorithms.html">03 · RL-алгоритми</a>
+    </div>
+  </nav>
+</div>
+
+<div class="page">
+
+  <div class="hero">
+    <span class="eyebrow">Крок 03 · Вибір алгоритму навчання</span>
+    <h1>Огляд <span class="accent">RL-алгоритмів</span> для керування машиною</h1>
+    <p class="lead">
+      Це не рекомендація "візьми оцей" — це карта місцевості. Мета: прочитати, порівняти самому і повернутись
+      із власним вибором, який потім розберемо разом. Список навмисно ширший, ніж потрібно — включно з
+      алгоритмами, які підходять погано, щоб було видно, ЧОМУ вони не годяться, а не просто що їх немає в списку.
+    </p>
+  </div>
+
+  <section id="axes">
+    <span class="eyebrow">01 · Три осі порівняння</span>
+    <h2>За чим взагалі порівнювати алгоритми</h2>
+    <p class="dek">Перш ніж дивитись на конкретні назви — три властивості, які відрізняють один алгоритм від іншого
+      і які варто тримати в голові при читанні карток нижче.</p>
+
+    <div class="axis-grid">
+      <div class="card axis-card">
+        <h4>Тип простору дій</h4>
+        <p>Дискретний (кінцевий список варіантів: "ліво", "право", "нічого") проти неперервного (будь-яке число
+          в діапазоні, напр. кермо від -1.0 до 1.0) проти змішаного (частина дій дискретна, частина неперервна —
+          саме наш випадок: газ 0/1, кермо і гальмо неперервні).</p>
+      </div>
+      <div class="card axis-card">
+        <h4>On-policy проти off-policy</h4>
+        <p>On-policy алгоритми вчаться тільки на щойно зібраному досвіді (кожна партія даних використовується
+          один раз і викидається) — стабільніші, але повільніше засвоюють дані. Off-policy зберігають досвід
+          у "буфер пам'яті" (replay buffer) і перевикористовують його багато разів — швидше вчаться з тієї ж
+          кількості спроб, але складніше налаштувати стабільно.</p>
+      </div>
+      <div class="card axis-card">
+        <h4>Value-based проти policy-based</h4>
+        <p>Value-based оцінює "наскільки хороша дія" (Q-значення) і обирає найкращу — природно для дискретних
+          дій. Policy-based напряму вчить функцію "стан → дія", може видавати неперервні числа. Actor-Critic —
+          гібрид: одна мережа оцінює (critic), інша діє (actor).</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="value-based">
+    <span class="eyebrow">02 · Родина 1</span>
+    <h2>Value-based (Q-learning та нащадки)</h2>
+    <p class="dek">Найстаріша й найпростіша для розуміння родина. Оцінюють "цінність" кожної можливої дії
+      в кожному стані і обирають найкращу.</p>
+
+    <div class="algo-grid">
+      <div class="card algo-card">
+        <div class="algo-name">Q-learning <span class="algo-year">1989</span></div>
+        <p class="algo-desc">Табличний метод — буквально таблиця "стан × дія → очікувана нагорода".
+          Праотець усієї родини value-based методів.</p>
+        <div class="fit-row">
+          <span class="pill bad">Дискретний стан і дія</span>
+          <span class="pill bad">Не масштабується</span>
+        </div>
+        <div>
+          <div class="sub-label">Чому не підходить нам</div>
+          <ul class="cons">
+            <li>Потребує таблицю на кожну комбінацію стану й дії — з неперервними кермом/гальмом таблиця
+              була б нескінченного розміру</li>
+            <li>Не працює з "сирими" даними на кшталт координат чи швидкості без ручного розбиття на комірки</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card algo-card">
+        <div class="algo-name">DQN (Deep Q-Network) <span class="algo-year">2015</span></div>
+        <p class="algo-desc">Q-learning, де таблицю замінили нейромережею — тепер працює з "сирими" станами
+          (наприклад пікселями екрану чи вектором датчиків), а не тільки табличними комірками.</p>
+        <div class="fit-row">
+          <span class="pill bad">Тільки дискретні дії</span>
+          <span class="pill good">Off-policy, ефективний</span>
+        </div>
+        <div>
+          <div class="sub-label">Чому не підходить нам напряму</div>
+          <ul class="cons">
+            <li>Видає одну дію з кінцевого списку — щоб керувати неперервним кермом, довелось би штучно
+              розбити -1.0..1.0 на, наприклад, 21 дискретний крок — грубий і незручний обхід</li>
+            <li>Не має вбудованої підтримки для змішаних дій (частина дискретна, частина неперервна)</li>
+          </ul>
+        </div>
+        <div>
+          <div class="sub-label">Де все ж міг би придатись</div>
+          <ul class="pros">
+            <li>Якби ми звели все керування до кількох дискретних кнопок (напр. "різко вліво / трохи вліво /
+              прямо / трохи вправо / різко вправо") — DQN спрацював би непогано, простий у реалізації</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="policy-based">
+    <span class="eyebrow">03 · Родина 2</span>
+    <h2>Policy-based / Actor-Critic для неперервних дій</h2>
+    <p class="dek">Ці алгоритми напряму вчать функцію "стан → неперервна дія", без потреби дискретизувати
+      кермо чи гальмо. Це основна родина для задач керування (робототехніка, автономні авто, наш випадок).</p>
+
+    <div class="algo-grid">
+      <div class="card algo-card">
+        <div class="algo-name">DDPG <span class="algo-year">2015</span></div>
+        <p class="algo-desc">Перший популярний actor-critic алгоритм для неперервних дій. Детермінована
+          політика (на однаковий стан завжди та сама дія).</p>
+        <div class="fit-row">
+          <span class="pill warn">Неперервні дії</span>
+          <span class="pill bad">Нестабільний</span>
+        </div>
+        <div>
+          <div class="sub-label">Чому радше ні</div>
+          <ul class="cons">
+            <li>Відомий нестабільним навчанням — часто переоцінює Q-значення, що веде до поганих політик</li>
+            <li>Детермінована політика гірше досліджує простір дій, легко застрягає в локальному оптимумі</li>
+            <li>У 2026 практично завжди витіснений TD3 — тим самим підходом, але виправленим</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card algo-card">
+        <div class="algo-name">TD3 (Twin Delayed DDPG) <span class="algo-year">2018</span></div>
+        <p class="algo-desc">Пряме виправлення проблем DDPG: дві critic-мережі (береться мінімум з двох
+          оцінок, щоб не переоцінювати), відкладене оновлення політики.</p>
+        <div class="fit-row">
+          <span class="pill good">Неперервні дії</span>
+          <span class="pill good">Off-policy, ефективний</span>
+        </div>
+        <div>
+          <div class="sub-label">Плюси</div>
+          <ul class="pros">
+            <li>Значно стабільніший за DDPG при тій самій швидкості навчання</li>
+            <li>Off-policy — ефективно перевикористовує зібраний досвід (менше "живих" спроб потрібно)</li>
+          </ul>
+        </div>
+        <div>
+          <div class="sub-label">Мінуси</div>
+          <ul class="cons">
+            <li>Детермінована політика — слабша природна дослідницька поведінка (exploration), ніж у SAC</li>
+            <li>Немає вбудованої підтримки дискретного газу — довелось би окремо додавати</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card algo-card">
+        <div class="algo-name">PPO (Proximal Policy Optimization) <span class="algo-year">2017</span></div>
+        <p class="algo-desc">On-policy метод від OpenAI. Обмежує, наскільки сильно політика може змінитись
+          за одне оновлення — це і дає йому репутацію "найстабільнішого і найпростішого в налаштуванні".</p>
+        <div class="fit-row">
+          <span class="pill good">Дискретні, неперервні, змішані</span>
+          <span class="pill warn">On-policy, повільніший</span>
+        </div>
+        <div>
+          <div class="sub-label">Плюси</div>
+          <ul class="pros">
+            <li>Дуже стабільний, менш чутливий до підбору гіперпараметрів — популярний вибір "за замовчуванням"</li>
+            <li>Природно підтримує і дискретні, і неперервні дії одночасно (multi-head policy) —
+              актуально для нашого газ+кермо+гальмо</li>
+            <li>Використовується в CarRacing-середовищах на практиці, добре задокументований</li>
+          </ul>
+        </div>
+        <div>
+          <div class="sub-label">Мінуси</div>
+          <ul class="cons">
+            <li>On-policy — кожна партія досвіду використовується один раз, тому потребує більше "живих"
+              спроб їзди, ніж off-policy методи при тій самій якості</li>
+            <li>Консервативне оновлення політики може обмежувати дослідження в складних поворотах</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card algo-card">
+        <div class="algo-name">SAC (Soft Actor-Critic) <span class="algo-year">2018</span></div>
+        <p class="algo-desc">Off-policy, стохастична (не детермінована) політика з "entropy maximization" —
+          алгоритм явно винагороджується за різноманітність дій, а не тільки за нагороду, що покращує
+          дослідження простору.</p>
+        <div class="fit-row">
+          <span class="pill good">Неперервні дії</span>
+          <span class="pill good">Off-policy, дуже ефективний</span>
+        </div>
+        <div>
+          <div class="sub-label">Плюси</div>
+          <ul class="pros">
+            <li>За емпіричними порівняннями — одна з найкращих точок старту для неперервного керування,
+              часто випереджає TD3 і PPO за фінальною якістю</li>
+            <li>Стохастична політика дослідує краще, менше застрягає в локальних оптимумах</li>
+            <li>Off-policy — ефективний за кількістю потрібних спроб</li>
+          </ul>
+        </div>
+        <div>
+          <div class="sub-label">Мінуси</div>
+          <ul class="cons">
+            <li>Базова версія розроблена під чисто неперервні дії — для нашого бінарного газу знадобиться
+              розширення (див. Hybrid SAC нижче)</li>
+            <li>Більше "рухомих частин" і гіперпараметрів для налаштування, ніж у PPO</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="hybrid-family">
+    <span class="eyebrow">04 · Родина 3</span>
+    <h2>Спеціально під змішаний простір дій</h2>
+    <p class="dek">Наш випадок (газ бінарний, кермо й гальмо неперервні) називається в літературі
+      "discrete-continuous hybrid action space" — і під нього існують окремі, спеціально розроблені варіанти
+      вже згаданих алгоритмів.</p>
+
+    <div class="algo-grid">
+      <div class="card algo-card">
+        <div class="algo-name">P-DQN (Parametrized DQN) <span class="algo-year">2018</span></div>
+        <p class="algo-desc">Розширення DQN: спершу дискретна дія обирається як зазвичай у DQN, а кожна
+          дискретна дія має свій "параметр" — неперервне число, що її уточнює.</p>
+        <div class="fit-row">
+          <span class="pill good">Точно наш тип задачі</span>
+          <span class="pill warn">Менш поширений, менше готових бібліотек</span>
+        </div>
+        <div>
+          <div class="sub-label">Плюси і мінуси</div>
+          <ul class="pros">
+            <li>Структура "дискретний вибір + неперервний параметр" один в один збігається з нашим
+              газ(0/1) + кермо/гальмо(неперервні)</li>
+          </ul>
+          <ul class="cons">
+            <li>Значно менше готових, перевірених реалізацій і туторіалів порівняно з PPO/SAC</li>
+            <li>Складніше налагоджувати самостійно через малу спільноту</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card algo-card">
+        <div class="algo-name">H-PPO (Hybrid PPO) <span class="algo-year">2019</span></div>
+        <p class="algo-desc">PPO з роздвоєною "головою" політики: одна гілка мережі видає дискretні дії,
+          друга — неперервні параметри, обидві навчаються разом через один спільний critic.</p>
+        <div class="fit-row">
+          <span class="pill good">Точно наш тип задачі</span>
+          <span class="pill good">Успадковує стабільність PPO</span>
+        </div>
+        <div>
+          <div class="sub-label">Плюси і мінуси</div>
+          <ul class="pros">
+            <li>Успадковує головну перевагу PPO — стабільність і терпимість до не ідеально підібраних
+              гіперпараметрів</li>
+            <li>Сама ідея гібридного простору дій (дискретний вибір + неперервні параметри), яку H-PPO
+              вирішує, широко застосовується в складних іграх зі структурованими діями типу StarCraft II чи
+              Honor of Kings — не обов'язково саме через H-PPO, але задача та сама</li>
+          </ul>
+          <ul class="cons">
+            <li>Менш стандартизована, ніж "ванільний" PPO — доведеться складніше адаптувати готовий код</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card algo-card">
+        <div class="algo-name">Hybrid SAC <span class="algo-year">2019-2020</span></div>
+        <p class="algo-desc">Розширення SAC на змішані простори дій. У дослідженнях застосовувався саме
+          до задачі керування машиною на високій швидкості (high-speed driving task).</p>
+        <div class="fit-row">
+          <span class="pill good">Точно наш тип задачі</span>
+          <span class="pill good">Перевірений на подібній задачі</span>
+        </div>
+        <div>
+          <div class="sub-label">Плюси і мінуси</div>
+          <ul class="pros">
+            <li>Успадковує сильні сторони SAC (ефективність, гарне дослідження простору дій)</li>
+            <li>Пряма наукова публікація застосовує його саме до водіння на швидкості — не абстрактний приклад</li>
+          </ul>
+          <ul class="cons">
+            <li>Найскладніша для самостійної реалізації з нуля опція в цьому списку</li>
+            <li>Найменше готових "з коробки" реалізацій у популярних бібліотеках порівняно з PPO чи SAC</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card algo-card">
+        <div class="algo-name">Спрощення: округлити до MultiDiscrete <span class="algo-year">практичний прийом</span></div>
+        <p class="algo-desc">Замість спеціального гібридного алгоритму — звести газ до окремого дискретного
+          виходу, а кермо/гальмо дискретизувати на, скажімо, 11 рівнів кожне (-1.0, -0.8 ... 1.0), і використати
+          звичайний PPO з підтримкою MultiDiscrete простору дій (є "з коробки" в популярних бібліотеках).</p>
+        <div class="fit-row">
+          <span class="pill warn">Обхідний шлях, не "чистий"</span>
+          <span class="pill good">Найпростіше реалізувати</span>
+        </div>
+        <div>
+          <div class="sub-label">Плюси і мінуси</div>
+          <ul class="pros">
+            <li>PPO з MultiDiscrete-підтримкою є "з коробки" в стандартних бібліотеках — не треба писати
+              гібридну архітектуру самому</li>
+            <li>Найменший ризик застрягти на архітектурних багах під час першої спроби</li>
+          </ul>
+          <ul class="cons">
+            <li>Втрачається справжня плавність кермування — 11 рівнів дискретизації дають "сходинки"
+              замість плавного повороту</li>
+            <li>Це компроміс заради простоти реалізації, а не "правильне" рішення задачі</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="different-paradigm">
+    <span class="eyebrow">05 · Зовсім інший підхід</span>
+    <h2>Не RL у класичному сенсі: нейроеволюція</h2>
+    <p class="dek">Вартий згадки, бо це справді інший спосіб розв'язати ту саму задачу — не через нагороду й
+      градієнтний спуск, а через "природний відбір" серед популяції мереж.</p>
+
+    <div class="algo-grid">
+      <div class="card algo-card">
+        <div class="algo-name">NEAT (NeuroEvolution of Augmenting Topologies) <span class="algo-year">2002</span></div>
+        <p class="algo-desc">Генетичний алгоритм: популяція нейромереж їздить трасою, найкращі за lap-time
+          "схрещуються" й мутують, найгірші відкидаються. Немає backpropagation, немає reward shaping —
+          лише фінальний результат кожної особини.</p>
+        <div class="fit-row">
+          <span class="pill warn">Інша парадигма, не "RL"</span>
+        </div>
+        <div>
+          <div class="sub-label">Плюси</div>
+          <ul class="pros">
+            <li>Задокументовано швидше сходиться на початку навчання порівняно з RL — простіше й
+              видовищніше спостерігати прогрес з нуля</li>
+            <li>Не вимагає ретельно продуманої reward-функції — досить одного підсумкового критерію
+              (наприклад пройдена відстань чи час кола)</li>
+            <li>Легше зрозуміти інтуїтивно (популяція, відбір, мутація) — менше математики, ніж у policy
+              gradient методах</li>
+          </ul>
+        </div>
+        <div>
+          <div class="sub-label">Мінуси</div>
+          <ul class="cons">
+            <li>За тим самим дослідженням — RL з достатнім часом навчання випереджає NEAT за фінальною
+              швидкістю й якістю проходження кола</li>
+            <li>Складно "тонко" використати наш детальний reward shaping (checkpoints, потенціал, track
+              limits) — NEAT природно працює з одним підсумковим критерієм fitness, а не з щокадровим сигналом</li>
+            <li>Вимагає одночасного тримання в пам'яті/симуляції цілої популяції машин (десятки-сотні),
+              а не однієї — інша вимога до архітектури гри</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="callout-label">Чому це тут, хоч і не "переможець"</span>
+      NEAT — реальна, задокументована альтернатива, яку варто знати, бо вона пропонує іншу мисленнєву модель
+      навчання (популяція та відбір, а не одна мережа, що поступово покращується). Деякі найвідоміші
+      YouTube-демонстрації "AI вчиться їздити на трасі" використовують саме NEAT — не тому що це технічно
+      краще, а тому що результат видовищний і його просто показати вже за кілька хвилин навчання.
+    </div>
+  </section>
+
+  <section id="matrix">
+    <span class="eyebrow">06 · Зведена таблиця</span>
+    <h2>Усі варіанти поруч</h2>
+    <div class="matrix-wrap scroll-x">
+      <table>
+        <thead>
+          <tr>
+            <th>Алгоритм</th>
+            <th>Тип дій</th>
+            <th>On/off-policy</th>
+            <th>Складність реалізації</th>
+            <th>Готові бібліотеки</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Q-learning</td><td>дискретні, малий простір</td><td>off-policy</td><td class="num">низька</td><td class="num">багато</td></tr>
+          <tr><td>DQN</td><td>тільки дискретні</td><td>off-policy</td><td class="num">низька-середня</td><td class="num">багато</td></tr>
+          <tr><td>DDPG</td><td>неперервні</td><td>off-policy</td><td class="num">середня</td><td class="num">багато</td></tr>
+          <tr><td>TD3</td><td>неперервні</td><td>off-policy</td><td class="num">середня</td><td class="num">багато</td></tr>
+          <tr><td>PPO</td><td>дискретні / неперервні / MultiDiscrete</td><td>on-policy</td><td class="num">середня</td><td class="num">дуже багато</td></tr>
+          <tr><td>SAC</td><td>неперервні (базова версія)</td><td>off-policy</td><td class="num">середня-висока</td><td class="num">багато</td></tr>
+          <tr><td>P-DQN</td><td>гібридні (дискр.+параметр)</td><td>off-policy</td><td class="num">висока</td><td class="num">мало</td></tr>
+          <tr><td>H-PPO</td><td>гібридні</td><td>on-policy</td><td class="num">висока</td><td class="num">мало</td></tr>
+          <tr><td>Hybrid SAC</td><td>гібридні</td><td>off-policy</td><td class="num">дуже висока</td><td class="num">дуже мало</td></tr>
+          <tr><td>PPO + MultiDiscrete (обхідний шлях)</td><td>гібридні через дискретизацію</td><td>on-policy</td><td class="num">низька-середня</td><td class="num">дуже багато</td></tr>
+          <tr><td>NEAT</td><td>будь-які (через вихід мережі)</td><td>не застосовується (популяційний)</td><td class="num">середня</td><td class="num">середньо</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="questions">
+    <span class="eyebrow">07 · Питання самому собі</span>
+    <h2>Перш ніж повертатись з вибором</h2>
+    <p class="dek">Не відповідай тут — просто тримай ці питання в голові, читаючи картки вище. Я запитаю
+      тебе про це, коли повернешся.</p>
+    <div class="decision-tree">
+      <div class="dt-node">
+        <div class="dt-q">Питання 1</div>
+        Наш простір дій — змішаний (дискретний газ + неперервні кермо/гальмо). Чи варто одразу братись за
+        "чистий" гібридний алгоритм (P-DQN / H-PPO / Hybrid SAC), чи почати з обхідного шляху (дискретизація
+        + звичайний PPO), і чому?
+      </div>
+      <div class="dt-node">
+        <div class="dt-q">Питання 2</div>
+        Наша reward-функція (з попереднього кроку) — щільна, покрокова, з checkpoints і потенціалом. Чи це
+        аргумент на користь on-policy чи off-policy методів?
+      </div>
+      <div class="dt-node">
+        <div class="dt-q">Питання 3</div>
+        Ти новачок у RL і будеш дебажити перший робочий прототип самостійно. Наскільки для тебе важлива
+        "складність реалізації" й "готові бібліотеки" з таблиці — порівняно з теоретичною ідеальністю вибору?
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>CarAI · навчальні матеріали · не є частиною коду гри</span>
+    <span>03 / 03</span>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  if (!('speechSynthesis' in window)) return;
+  const synth = window.speechSynthesis;
+  let voice = null;
+
+  function pickVoice() {
+    const voices = synth.getVoices();
+    if (!voices.length) return null;
+    const priority = ['uk', 'ru', 'en'];
+    for (const langPrefix of priority) {
+      const found = voices.find(v => v.lang.toLowerCase().startsWith(langPrefix));
+      if (found) return found;
+    }
+    return voices[0];
+  }
+
+  function ensureVoice(cb) {
+    if (voice) { cb(voice); return; }
+    voice = pickVoice();
+    if (voice) { cb(voice); return; }
+    synth.addEventListener('voiceschanged', function onChange() {
+      voice = pickVoice();
+      synth.removeEventListener('voiceschanged', onChange);
+      if (voice) cb(voice);
+    });
+  }
+
+  let currentUtterance = null;
+
+  function speak(text, btn) {
+    if (synth.speaking) {
+      synth.cancel();
+      if (btn) btn.classList.remove('speaking');
+      if (currentUtterance && currentUtterance.__btn === btn) { currentUtterance = null; return; }
+    }
+    ensureVoice((v) => {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.voice = v;
+      utter.lang = v.lang;
+      utter.rate = 1.0;
+      utter.__btn = btn;
+      utter.onstart = () => btn && btn.classList.add('speaking');
+      utter.onend = () => btn && btn.classList.remove('speaking');
+      utter.onerror = () => btn && btn.classList.remove('speaking');
+      currentUtterance = utter;
+      synth.speak(utter);
+    });
+  }
+
+  function makeButton(targetEl) {
+    const btn = document.createElement('button');
+    btn.className = 'tts-btn';
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Озвучити текст');
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+      '<path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/>' +
+      '<path d="M16.5 8.5a5 5 0 0 1 0 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>' +
+      '<path d="M19 6a9 9 0 0 1 0 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.6"/>' +
+      '</svg>';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const text = targetEl.innerText || targetEl.textContent;
+      speak(text.trim(), btn);
+    });
+    return btn;
+  }
+
+  function wrapTarget(el) {
+    if (el.dataset.ttsWrapped) return;
+    if (!el.textContent || el.textContent.trim().length < 12) return;
+    el.dataset.ttsWrapped = '1';
+    el.classList.add('tts-target');
+    el.appendChild(makeButton(el));
+  }
+
+  function init() {
+    const selectors = [
+      'section p.dek', '.card p', '.callout', '.algo-card ul li',
+      '.axis-card p', '.dt-node'
+    ];
+    document.querySelectorAll(selectors.join(',')).forEach(wrapTarget);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
