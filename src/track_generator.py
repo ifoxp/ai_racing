@@ -25,6 +25,8 @@ class Track:
     right_edge: np.ndarray   # (N, 2) — правий край асфальту
     checkpoints: np.ndarray  # (M, 2) — контрольні точки вздовж центральної лінії
     control_points: np.ndarray  # (K, 2) — вихідні точки циклу до згладжування
+    start_pos: np.ndarray    # (2,) — координати центру стартової лінії
+    start_dir: np.ndarray    # (2,) — нормалізований вектор напрямку руху на старті
 
 
 def _sample_points(rng: np.random.Generator, count: int, radius: float,
@@ -320,12 +322,13 @@ def _has_sharp_turns(points: np.ndarray, min_angle_deg: float = 75.0) -> bool:
 
 
 def generate_track(seed: int, point_count: int = 18, radius: float = 400.0,
-                    track_width: float = 22.0, checkpoint_spacing: int = 8) -> Track:
-    """Генерує повну трасу за seed. Використовує патерн 'Generate & Validate':
-    якщо готова траса має глобальне накладання асфальту (дві віддалені ділянки
-    проходять надто близько), варіант відкидається і пробується наступний seed.
-    Для зовнішнього коду результат все одно детермінований — той самий вхідний
-    seed завжди повертає ту саму фінальну трасу."""
+                    track_width: float = 22.0, checkpoint_spacing: int = 8,
+                    start_straight_length: float = 120.0) -> Track:
+    """Генерує повну трасу за seed з гарантованою стартовою прямою. Використовує
+    патерн 'Generate & Validate': якщо готова траса не відповідає вимогам (гострі
+    кути, глобальне накладання асфальту, немає місця для старту), варіант
+    відкидається і пробується наступний seed. Для зовнішнього коду результат все
+    одно детермінований — той самий вхідний seed завжди повертає ту саму трасу."""
     current_seed = seed
 
     while True:
@@ -348,6 +351,27 @@ def generate_track(seed: int, point_count: int = 18, radius: float = 400.0,
         if _has_sharp_turns(control_points, min_angle_deg=75.0):
             current_seed += 1
             continue
+
+        # Знаходимо найдовший відрізок базового скелета — кандидат на стартову пряму.
+        diffs = np.roll(control_points, -1, axis=0) - control_points
+        lengths = np.linalg.norm(diffs, axis=1)
+        longest_idx = int(np.argmax(lengths))
+        max_len = lengths[longest_idx]
+
+        # Якщо найдовший відрізок закороткий для старту (із запасом 1.5) — інший seed.
+        if max_len < start_straight_length * 1.5:
+            current_seed += 1
+            continue
+
+        A = control_points[longest_idx]
+        start_pos = A + 0.5 * diffs[longest_idx]
+        start_dir = diffs[longest_idx] / max_len
+
+        # Вставляємо точки строго на прямій між A і B — колінеарні точки Чайкін і
+        # Catmull-Rom залишають ідеально рівними, тому тут гарантовано пряма ділянка.
+        t = np.linspace(0, 1, 8)[1:-1]
+        inserted_points = A + t[:, None] * diffs[longest_idx]
+        control_points = np.insert(control_points, longest_idx + 1, inserted_points, axis=0)
 
         # Зрізаємо гострі кути (Чайкін) замість того, щоб тягнути точки до центру —
         # зберігає унікальну форму траси (не колапсує в коло), але кути стають досить
@@ -381,4 +405,6 @@ def generate_track(seed: int, point_count: int = 18, radius: float = 400.0,
         right_edge=right_edge,
         checkpoints=checkpoints,
         control_points=control_points,
+        start_pos=start_pos,
+        start_dir=start_dir,
     )
