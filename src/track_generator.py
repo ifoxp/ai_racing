@@ -181,27 +181,68 @@ def _remove_crossings(points: np.ndarray, cycle: list[int], max_iterations: int 
     return cycle_arr.tolist()
 
 
-def _catmull_rom(p0, p1, p2, p3, t: np.ndarray) -> np.ndarray:
-    t2 = t * t
-    t3 = t2 * t
-    x = 0.5 * (
-        (2 * p1[0])
-        + (-p0[0] + p2[0]) * t
-        + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2
-        + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3
-    )
-    y = 0.5 * (
-        (2 * p1[1])
-        + (-p0[1] + p2[1]) * t
-        + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2
-        + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3
-    )
-    return np.column_stack([x, y])
+def _centripetal_catmull_rom(p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, samples: int) -> np.ndarray:
+    """Обчислює доцентровий (Centripetal) Catmull-Rom сплайн між p1 та p2.
+    Усуває утворення петель (overshooting), які виникають у звичайному Uniform сплайні."""
+    def get_t(t_start, p_start, p_end, alpha=0.5):
+        d = np.linalg.norm(p_end - p_start)
+        if d == 0:
+            return t_start
+        return t_start + d**alpha
+
+    t0 = 0.0
+    t1 = get_t(t0, p0, p1)
+    t2 = get_t(t1, p1, p2)
+    t3 = get_t(t2, p2, p3)
+
+    if t1 == t2:
+        return np.tile(p1, (samples, 1))
+
+    t = np.linspace(t1, t2, samples, endpoint=False)
+
+    A1 = (t1 - t)[:, None] / (t1 - t0) * p0 + (t - t0)[:, None] / (t1 - t0) * p1
+    A2 = (t2 - t)[:, None] / (t2 - t1) * p1 + (t - t1)[:, None] / (t2 - t1) * p2
+    A3 = (t3 - t)[:, None] / (t3 - t2) * p2 + (t - t2)[:, None] / (t3 - t2) * p3
+
+    B1 = (t2 - t)[:, None] / (t2 - t0) * A1 + (t - t0)[:, None] / (t2 - t0) * A2
+    B2 = (t3 - t)[:, None] / (t3 - t1) * A2 + (t - t1)[:, None] / (t3 - t1) * A3
+
+    C = (t2 - t)[:, None] / (t2 - t1) * B1 + (t - t1)[:, None] / (t2 - t1) * B2
+    return C
+
+
+def _chaikin_cut(points: np.ndarray, iterations: int = 2, ratio: float = 0.25) -> np.ndarray:
+    """Алгоритм Чайкіна для зрізання кутів. Зберігає унікальну форму траси, але
+    зрізає гострі кути, запобігаючи перекручуванню нормалей (країв асфальту)."""
+    curr_points = points.copy()
+    for _ in range(iterations):
+        n = len(curr_points)
+        new_points = []
+        for i in range(n):
+            p0 = curr_points[i]
+            p1 = curr_points[(i + 1) % n]
+            q = (1 - ratio) * p0 + ratio * p1
+            r = ratio * p0 + (1 - ratio) * p1
+            new_points.append(q)
+            new_points.append(r)
+        curr_points = np.array(new_points)
+    return curr_points
+
+
+def _smooth_dense_line(points: np.ndarray, passes: int = 3) -> np.ndarray:
+    """Пост-обробка: згладжує фінальну щільну лінію (Moving Average). Зберігає
+    макро-форму траси, але повністю 'розплутує' мікро-вузли та різкі злами,
+    що виникають через математичні аномалії сплайну."""
+    smoothed = points.copy()
+    for _ in range(passes):
+        prev_pts = np.roll(smoothed, 1, axis=0)
+        next_pts = np.roll(smoothed, -1, axis=0)
+        smoothed = 0.25 * prev_pts + 0.5 * smoothed + 0.25 * next_pts
+    return smoothed
 
 
 def _smooth_closed_loop(points: np.ndarray, samples_per_segment: int = 16) -> np.ndarray:
     n = len(points)
-    t = np.linspace(0, 1, samples_per_segment, endpoint=False)
     segments = []
     for i in range(n):
         p0, p1, p2, p3 = (
@@ -210,7 +251,7 @@ def _smooth_closed_loop(points: np.ndarray, samples_per_segment: int = 16) -> np
             points[(i + 1) % n],
             points[(i + 2) % n],
         )
-        segments.append(_catmull_rom(p0, p1, p2, p3, t))
+        segments.append(_centripetal_catmull_rom(p0, p1, p2, p3, samples_per_segment))
     return np.concatenate(segments, axis=0)
 
 
@@ -228,39 +269,113 @@ def _offset_loop(points: np.ndarray, width: float) -> tuple[np.ndarray, np.ndarr
     return left, right
 
 
+def _is_track_valid(center_line: np.ndarray, track_width: float) -> bool:
+    """Векторизована перевірка на фізичне накладання ділянок траси. Перевіряє,
+    чи є будь-які дві віддалені (по індексу) точки траси ближчими одна до одної,
+    ніж повна ширина асфальту."""
+    step = 4
+    pts = center_line[::step]
+    m = len(pts)
+
+    diff = pts[:, None, :] - pts[None, :, :]
+    dist = np.sqrt((diff ** 2).sum(axis=-1))
+
+    idx = np.arange(m)
+    idx_diff = np.abs(idx[:, None] - idx[None, :])
+    cycle_dist = np.minimum(idx_diff, m - idx_diff)
+
+    ignore_window = max(5, int(m * 0.15))
+    dist[cycle_dist < ignore_window] = np.inf
+
+    min_clearance = track_width * 2.2
+
+    return bool(np.min(dist) >= min_clearance)
+
+
+def _has_sharp_turns(points: np.ndarray, min_angle_deg: float = 75.0) -> bool:
+    """Векторизовано обчислює внутрішні кути між усіма сусідніми відрізками.
+    Повертає True, якщо є хоча б один кут, гостріший за min_angle_deg. Це
+    запобігає утворенню вузьких 'шпильок' (hairpins)."""
+    prev_pts = np.roll(points, 1, axis=0)
+    next_pts = np.roll(points, -1, axis=0)
+
+    v1 = prev_pts - points
+    v2 = next_pts - points
+
+    n1 = np.linalg.norm(v1, axis=-1)
+    n2 = np.linalg.norm(v2, axis=-1)
+
+    valid = (n1 > 0) & (n2 > 0)
+    if not np.any(valid):
+        return False
+
+    v1_norm = v1[valid] / n1[valid, None]
+    v2_norm = v2[valid] / n2[valid, None]
+
+    dot_prod = np.sum(v1_norm * v2_norm, axis=-1)
+    angles = np.arccos(np.clip(dot_prod, -1.0, 1.0))
+    angles_deg = np.degrees(angles)
+
+    return bool(np.any(angles_deg < min_angle_deg))
+
+
 def generate_track(seed: int, point_count: int = 18, radius: float = 400.0,
                     track_width: float = 22.0, checkpoint_spacing: int = 8) -> Track:
-    """Генерує повну трасу за seed. Той самий seed завжди дає ту саму трасу.
+    """Генерує повну трасу за seed. Використовує патерн 'Generate & Validate':
+    якщо готова траса має глобальне накладання асфальту (дві віддалені ділянки
+    проходять надто близько), варіант відкидається і пробується наступний seed.
+    Для зовнішнього коду результат все одно детермінований — той самий вхідний
+    seed завжди повертає ту саму фінальну трасу."""
+    current_seed = seed
 
-    ВІДОМА ПРОБЛЕМА (навмисно залишена як є, будемо виправляти по кроках):
-    center_line гарантовано без самоперетинів (2-opt), але офсетні контури
-    left_edge/right_edge (краї асфальту) МОЖУТЬ самоперетинатись у гострих поворотах,
-    якщо ширина траси більша за локальний радіус кривизни. Це видно візуально як
-    "петлі"/перехрещення асфальту в деяких місцях."""
-    rng = np.random.default_rng(seed)
-    min_gap = track_width * 2.4  # асфальт шириною track_width*2 обабіч + запас
+    while True:
+        rng = np.random.default_rng(current_seed)
+        min_gap = track_width * 2.4
 
-    points = _sample_points(rng, point_count, radius, min_gap=min_gap)
-    edges = _build_delaunay_edges(points)
-    mst_adj = _prim_mst(points, edges)
-    cycle_indices = _tree_to_cycle(mst_adj, root=0)
-    cycle_indices = _remove_crossings(points, cycle_indices)
+        points = _sample_points(rng, point_count, radius, min_gap=min_gap)
+        edges = _build_delaunay_edges(points)
+        mst_adj = _prim_mst(points, edges)
+        cycle_indices = _tree_to_cycle(mst_adj, root=0)
 
-    control_points = points[cycle_indices]
-    center_line = _smooth_closed_loop(control_points, samples_per_segment=16)
+        # 2-opt працює ТІЛЬКИ на графах (індексах точок), щоб розплутати структуру.
+        cycle_indices = _remove_crossings(points, cycle_indices)
 
-    # Catmull-Rom може "перестрелити" за контрольні точки на гострих поворотах і
-    # створити нові самоперетини центральної лінії, яких не було в ламаній лінії —
-    # 2-opt повторюється вже на самій згладженій кривій.
-    smooth_cycle = _remove_crossings(center_line, list(range(len(center_line))))
-    center_line = center_line[smooth_cycle]
+        control_points = points[cycle_indices]
+
+        # Відкидаємо скелети з гострими "шпильками" (кут < 75°) ще до дорогої
+        # математики сплайнів/офсетів — такий базовий кут завжди дасть затиснутий
+        # поворот, незалежно від того, як сильно ми його потім згладжуватимемо.
+        if _has_sharp_turns(control_points, min_angle_deg=75.0):
+            current_seed += 1
+            continue
+
+        # Зрізаємо гострі кути (Чайкін) замість того, щоб тягнути точки до центру —
+        # зберігає унікальну форму траси (не колапсує в коло), але кути стають досить
+        # тупими, щоб офсетні нормалі (краї асфальту) не перекручувались.
+        control_points = _chaikin_cut(control_points, iterations=4, ratio=0.25)
+
+        # Завдяки Centripetal Catmull-Rom лінія більше не буде самоперетинатись,
+        # тому другий прохід 2-opt на фізичних координатах тут не потрібен.
+        center_line = _smooth_closed_loop(control_points, samples_per_segment=16)
+
+        # Пост-обробка: розгладжуємо центральну лінію від мікро-вузлів.
+        center_line = _smooth_dense_line(center_line, passes=3)
+
+        if _is_track_valid(center_line, track_width):
+            break
+        current_seed += 1
 
     left_edge, right_edge = _offset_loop(center_line, track_width)
+
+    # Пост-обробка: згладжуємо самі краї асфальту — прибирає "хвости ластівки"
+    # (перекрути), які могли лишитись на офсетних контурах.
+    left_edge = _smooth_dense_line(left_edge, passes=2)
+    right_edge = _smooth_dense_line(right_edge, passes=2)
 
     checkpoints = center_line[::checkpoint_spacing]
 
     return Track(
-        seed=seed,
+        seed=seed,  # зберігаємо оригінальний вхідний seed для сумісності з іншим кодом
         center_line=center_line,
         left_edge=left_edge,
         right_edge=right_edge,

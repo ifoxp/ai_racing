@@ -16,7 +16,10 @@
       "Bash(venv/Scripts/python.exe -c ' *)",
       "Bash(timeout 8 \"venv/Scripts/python.exe\" src/main.py)",
       "Bash(echo \"EXIT_CODE=$?\")",
-      "Bash(timeout 6 \"venv/Scripts/python.exe\" src/main.py)"
+      "Bash(timeout 6 \"venv/Scripts/python.exe\" src/main.py)",
+      "Bash(powershell -Command 'Get-Process | Where-Object { $_.ProcessName -like '\\\\''*python*'\\\\'' } | Select-Object Id, ProcessName, Responding')",
+      "Bash(\"venv/Scripts/python.exe\" \"C:/Users/ifoxp/AppData/Local/Temp/claude/e--Programing-Phyton-CarAI/eec96fc5-0b3a-4021-a50c-ab9b1af8139c/scratchpad/verify_gv.py\")",
+      "Bash(\"venv/Scripts/python.exe\" \"C:/Users/ifoxp/AppData/Local/Temp/claude/e--Programing-Phyton-CarAI/eec96fc5-0b3a-4021-a50c-ab9b1af8139c/scratchpad/verify_gv2.py\")"
     ],
     "additionalDirectories": [
       "e:\\Programing\\Phyton\\CarAI"
