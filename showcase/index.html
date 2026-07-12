@@ -1,0 +1,1494 @@
+<title>CarAI — Racing Track Generation &amp; RL</title>
+
+<style>
+  @font-face {
+    font-family: 'JetBrains Mono';
+    src: local('JetBrains Mono');
+    font-weight: 400 800;
+  }
+
+  :root {
+    --bg: #0d1113;
+    --bg-raised: #12171a;
+    --bg-card: #161c1f;
+    --border: #232c30;
+    --border-soft: #1a2124;
+    --text-primary: #e4ecee;
+    --text-secondary: #93a7ac;
+    --text-faint: #5c7075;
+    --accent: #e8a33d;
+    --accent-strong: #ffb84d;
+    --accent-soft: rgba(232, 163, 61, 0.14);
+    --cyan: #4fb2c7;
+    --cyan-strong: #7fd4e8;
+    --good: #5fbf8f;
+    --bad: #d8695a;
+    --asphalt: #262e32;
+    --grass: #16211a;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #f3f1ea;
+    --bg-raised: #ffffff;
+    --bg-card: #ffffff;
+    --border: #ddd7c8;
+    --border-soft: #e8e3d6;
+    --text-primary: #262220;
+    --text-secondary: #5c5650;
+    --text-faint: #928c82;
+    --accent: #b5762a;
+    --accent-strong: #96591c;
+    --accent-soft: rgba(181, 118, 42, 0.12);
+    --cyan: #1f7a8f;
+    --cyan-strong: #145b6b;
+    --good: #2f7a56;
+    --bad: #b0402f;
+    --asphalt: #d8d2c2;
+    --grass: #dde3d0;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f3f1ea;
+      --bg-raised: #ffffff;
+      --bg-card: #ffffff;
+      --border: #ddd7c8;
+      --border-soft: #e8e3d6;
+      --text-primary: #262220;
+      --text-secondary: #5c5650;
+      --text-faint: #928c82;
+      --accent: #b5762a;
+      --accent-strong: #96591c;
+      --accent-soft: rgba(181, 118, 42, 0.12);
+      --cyan: #1f7a8f;
+      --cyan-strong: #145b6b;
+      --good: #2f7a56;
+      --bad: #b0402f;
+      --asphalt: #d8d2c2;
+      --grass: #dde3d0;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.55;
+    overflow-x: hidden;
+  }
+
+  body { max-width: 100%; }
+
+  h1, h2, h3, .mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  h1, h2, h3 { text-wrap: balance; letter-spacing: -0.01em; }
+
+  ::selection { background: var(--accent-soft); color: var(--accent-strong); }
+
+  a { color: var(--cyan-strong); }
+
+  /* ---------- Layout shells ---------- */
+
+  .nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .nav__brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+  }
+
+  .nav__brand-mark {
+    width: 20px; height: 20px;
+  }
+
+  .nav__links {
+    display: flex;
+    gap: 22px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+  }
+
+  .nav__links a {
+    color: inherit;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+    transition: color 0.15s ease;
+  }
+  .nav__links a:hover { color: var(--accent-strong); }
+
+  @media (max-width: 760px) {
+    .nav__links { display: none; }
+  }
+
+  main { padding-top: 64px; }
+
+  section {
+    padding: 88px 24px;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+
+  section + section { border-top: 1px solid var(--border-soft); }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+
+  .section-title {
+    font-size: clamp(24px, 3.4vw, 34px);
+    font-weight: 700;
+    margin: 0 0 16px;
+    color: var(--text-primary);
+  }
+
+  .section-lede {
+    font-size: 16px;
+    color: var(--text-secondary);
+    max-width: 62ch;
+    margin: 0 0 40px;
+  }
+
+  .section-lede b, .section-lede strong { color: var(--text-primary); font-weight: 600; }
+
+  code, .kbd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88em;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    color: var(--cyan-strong);
+  }
+
+  /* ---------- Hero ---------- */
+
+  .hero {
+    padding: 150px 24px 90px;
+    max-width: 1080px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    gap: 48px;
+    align-items: center;
+  }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; padding-top: 120px; }
+  }
+
+  .hero__title {
+    font-size: clamp(34px, 6vw, 58px);
+    font-weight: 800;
+    line-height: 1.04;
+    margin: 0 0 20px;
+  }
+
+  .hero__title .accent { color: var(--accent-strong); }
+
+  .hero__sub {
+    font-size: 17px;
+    color: var(--text-secondary);
+    max-width: 50ch;
+    margin: 0 0 28px;
+  }
+
+  .hero__stats {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stat__value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent-strong);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat__label {
+    font-size: 11.5px;
+    color: var(--text-faint);
+    letter-spacing: 0.03em;
+  }
+
+  .hero__canvas-wrap {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--grass);
+    aspect-ratio: 4 / 3;
+    box-shadow: 0 24px 60px -20px rgba(0,0,0,0.5);
+  }
+
+  :root[data-theme="light"] .hero__canvas-wrap,
+  @media (prefers-color-scheme: light) { .hero__canvas-wrap { box-shadow: 0 24px 60px -30px rgba(80,70,50,0.3); } }
+
+  .hero__canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+
+  .hero__canvas-tag {
+    position: absolute;
+    top: 12px; left: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    border: 1px solid var(--border-soft);
+    padding: 4px 9px;
+    border-radius: 20px;
+    backdrop-filter: blur(6px);
+  }
+
+  /* ---------- Panels / cards ---------- */
+
+  .panel {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .panel__canvas-area {
+    position: relative;
+    background: var(--grass);
+  }
+
+  .panel__canvas-area canvas { display: block; width: 100%; height: auto; }
+
+  .panel__controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 16px 18px;
+    border-top: 1px solid var(--border-soft);
+    background: var(--bg-card);
+  }
+
+  .btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent-strong); }
+  .btn:active { transform: translateY(1px); }
+  .btn.is-active { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
+
+  .btn--primary {
+    color: var(--bg);
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+    font-weight: 700;
+  }
+  .btn--primary:hover { color: var(--bg); filter: brightness(1.08); }
+
+  .field-label {
+    font-size: 11px;
+    color: var(--text-faint);
+    letter-spacing: 0.03em;
+    margin-right: 2px;
+  }
+
+  .slider-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+
+  .slider-group input[type="range"] {
+    accent-color: var(--accent-strong);
+    width: 120px;
+  }
+
+  .readout {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--accent-strong);
+    min-width: 3ch;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .panel__spacer { flex: 1; }
+
+  /* ---------- Two-col layout ---------- */
+
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
+  }
+  @media (max-width: 780px) {
+    .split { grid-template-columns: 1fr; }
+  }
+
+  .split--reverse { direction: rtl; }
+  .split--reverse > * { direction: ltr; }
+
+  .copy h3 {
+    font-size: 16px;
+    margin: 0 0 8px;
+    color: var(--text-primary);
+  }
+
+  .copy p { color: var(--text-secondary); font-size: 14.5px; margin: 0 0 14px; }
+
+  .pipeline-list {
+    list-style: none;
+    margin: 0; padding: 0;
+    counter-reset: step;
+  }
+  .pipeline-list li {
+    counter-increment: step;
+    position: relative;
+    padding: 10px 0 10px 34px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .pipeline-list li:last-child { border-bottom: none; }
+  .pipeline-list li b { color: var(--text-primary); }
+  .pipeline-list li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 9px;
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pipeline-list li.is-current::before {
+    border-color: var(--accent-strong);
+    color: var(--accent-strong);
+    background: var(--accent-soft);
+  }
+  .pipeline-list li.is-current b { color: var(--accent-strong); }
+
+  /* ---------- Reward table ---------- */
+
+  .reward-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  .reward-table th, .reward-table td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .reward-table th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    font-weight: 600;
+  }
+  .reward-table td.val {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .reward-table tr:hover td { background: var(--bg-card); }
+  .pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .pill--good { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+  .pill--bad  { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+  .pill--neutral { background: var(--bg-card); color: var(--text-faint); border: 1px solid var(--border); }
+
+  /* ---------- Architecture diagram ---------- */
+
+  .arch {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  @media (max-width: 700px) { .arch { grid-template-columns: 1fr; } }
+
+  .arch__node {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    position: relative;
+  }
+  .arch__node b { color: var(--text-primary); display: block; margin-bottom: 4px; font-size: 13.5px; }
+  .arch__node .mono-tag {
+    display: inline-block;
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--cyan-strong);
+    background: color-mix(in srgb, var(--cyan) 14%, transparent);
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  /* ---------- Footer ---------- */
+
+  footer {
+    padding: 48px 24px 64px;
+    max-width: 1080px;
+    margin: 0 auto;
+    color: var(--text-faint);
+    font-size: 12.5px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .theme-toggle {
+    position: fixed;
+    bottom: 20px; right: 20px;
+    z-index: 90;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+    color: var(--text-secondary);
+    display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  .caption {
+    font-size: 11.5px;
+    color: var(--text-faint);
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+  .caption b { color: var(--text-secondary); }
+</style>
+
+<nav class="nav">
+  <div class="nav__brand">
+    <svg class="nav__brand-mark" viewBox="0 0 24 24" fill="none">
+      <path d="M4 15c0-5 3-9 8-9s8 4 8 9" stroke="var(--cyan-strong)" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="12" cy="16" r="2.4" fill="var(--accent-strong)"/>
+    </svg>
+    CarAI
+  </div>
+  <div class="nav__links">
+    <a href="#track">Генерація траси</a>
+    <a href="#physics">Фізика</a>
+    <a href="#agent">RL-агент</a>
+    <a href="#reward">Reward</a>
+    <a href="#training">Навчання</a>
+  </div>
+</nav>
+
+<main>
+
+  <section class="hero" style="padding-top:150px;">
+    <div>
+      <p class="eyebrow">Procedural racing + reinforcement learning</p>
+      <h1 class="hero__title">Траса, якої<br>ще не існувало.<br><span class="accent">Бот, який вчиться.</span></h1>
+      <p class="hero__sub">
+        CarAI генерує унікальну гоночну трасу з довільного seed, дає гравцю проїхати її вручну,
+        а потім тренує рій PPO-агентів, які вчаться перегнати ваш власний рекорд —
+        наживо, у тому самому вікні.
+      </p>
+      <div class="hero__stats">
+        <div class="stat"><span class="stat__value" id="stat-tracks">128</span><span class="stat__label">unique seeds tested</span></div>
+        <div class="stat"><span class="stat__value">9</span><span class="stat__label">raycast променів</span></div>
+        <div class="stat"><span class="stat__value">≤24</span><span class="stat__label">паралельних ботів</span></div>
+        <div class="stat"><span class="stat__value">3 → 10</span><span class="stat__label">кола до автозміни траси</span></div>
+      </div>
+    </div>
+    <div class="hero__canvas-wrap">
+      <span class="hero__canvas-tag">seed = <span id="hero-seed">417213</span></span>
+      <canvas id="heroCanvas"></canvas>
+    </div>
+  </section>
+
+  <!-- ================= TRACK GENERATION ================= -->
+  <section id="track">
+    <p class="eyebrow">01 · Процедурна генерація</p>
+    <h2 class="section-title">Від хаосу точок до гоночного кола</h2>
+    <p class="section-lede">
+      Кожен seed проходить один і той самий конвеєр — від випадкових точок по колу
+      до згладженої, гарантовано непересічної траси з асфальтом фіксованої ширини.
+      Натисніть кнопку нижче, щоб прогнати конвеєр крок за кроком.
+    </p>
+
+    <div class="panel">
+      <div class="panel__canvas-area">
+        <canvas id="trackCanvas"></canvas>
+      </div>
+      <div class="panel__controls">
+        <button class="btn btn--primary" id="trackPlayBtn">▶ Прогнати конвеєр</button>
+        <button class="btn" id="trackNextBtn">Наступний крок</button>
+        <button class="btn" id="trackReseedBtn">🎲 Новий seed</button>
+        <div class="panel__spacer"></div>
+        <span class="field-label">Крок:</span>
+        <span class="readout" id="trackStepLabel">1 / 6</span>
+      </div>
+    </div>
+    <p class="caption" id="trackStepCaption">Крок 1 — розкидаємо точки по колу з мінімальною відстанню між ними (Poisson-disk-like).</p>
+
+    <div class="split" style="margin-top:56px;">
+      <div class="copy">
+        <h3>Пайплайн одного seed</h3>
+        <ol class="pipeline-list" id="pipelineList">
+          <li><b>Точки по колу</b> — випадковий радіус + мінімальний gap, уникає самоперетинів за побудовою.</li>
+          <li><b>Delaunay → MST → DFS-цикл</b> — тріангуляція, кістяк дерева, обхід у гамільтонів цикл.</li>
+          <li><b>2-opt на графі</b> — усуває самоперетини індексів control points.</li>
+          <li><b>Chaikin + Catmull-Rom</b> — доцентрова параметризація, без overshoot і петель.</li>
+          <li><b>Generate &amp; Validate</b> — перевірка гострих кутів і глобальних накладань; не підійшло — наступний seed.</li>
+          <li><b>Офсет-контури</b> — лівий/правий край асфальту фіксованої ширини + checkpoints.</li>
+        </ol>
+      </div>
+      <div class="copy">
+        <h3>Чому не найпростіший шлях</h3>
+        <p>Наївний offset-полігон з довільної ламаної майже завжди самоперетинається на гострих поворотах.
+        Це вирішувалося ітеративно: спроби з Laplacian-згладжуванням «зжирали» форму траси до кола,
+        Chaikin+2-opt разом виявився надто повільним (4.6с/seed) — фінальна комбінація на діаграмі зліва
+        генерує трасу приблизно за <code>4 мс</code> і проходить перевірку на самоперетини.</p>
+        <p>Стартова пряма для гравця шукається як найдовший відрізок control points — там вставляються
+        колінеарні точки під шаховий розмітку старту.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PHYSICS ================= -->
+  <section id="physics">
+    <p class="eyebrow">02 · Модель машини</p>
+    <h2 class="section-title">Heading ≠ Velocity</h2>
+    <p class="section-lede">
+      Машина керує напрямком капота (<code>heading</code>), але фактично рухається вздовж
+      вектора <code>velocity</code>. «Зчеплення» (traction) підтягує другий до першого —
+      повільно на високій швидкості, тому й з'являється занос у поворотах.
+    </p>
+
+    <div class="split split--reverse">
+      <div class="panel">
+        <div class="panel__canvas-area">
+          <canvas id="physicsCanvas"></canvas>
+        </div>
+        <div class="panel__controls">
+          <span class="field-label">Керування:</span>
+          <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span>
+          <div class="panel__spacer"></div>
+          <div class="slider-group">
+            <span class="field-label">Швидкість</span>
+            <span class="readout" id="physSpeedReadout">0</span>
+          </div>
+        </div>
+      </div>
+      <div class="copy">
+        <h3>Спробуйте самі</h3>
+        <p>Клікніть на трасу нижче й керуйте клавіатурою — <b>W</b> газ, <b>A</b>/<b>D</b> кермо, <b>S</b> гальмо.
+        Жовтий вектор — <code>heading</code> (куди дивиться капот), блакитний — <code>velocity</code>
+        (куди реально їде машина). На великій швидкості вони розходяться — це і є занос.</p>
+        <p>Параметри підбиралися вручну під відчуття: розгін уповільнено
+        (<code>ACCELERATION 260→140</code>), кермо зроблено чутливішим на швидкості
+        (<code>MIN_STEER_RATE 0.55→1.1</code>).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RL AGENT ================= -->
+  <section id="agent">
+    <p class="eyebrow">03 · Що бачить бот</p>
+    <h2 class="section-title">9 променів, і жодного пікселя</h2>
+    <p class="section-lede">
+      Замість зображення — компактний вектор із 13 чисел: 9 raycast-дистанцій до країв траси,
+      швидкість, sin/cos кута до наступного checkpoint і відстань. Навмисно непарна кількість
+      променів — щоб один завжди дивився точно вперед.
+    </p>
+
+    <div class="panel">
+      <div class="panel__canvas-area">
+        <canvas id="rayCanvas"></canvas>
+      </div>
+      <div class="panel__controls">
+        <span class="field-label">Кут огляду</span>
+        <div class="slider-group">
+          <input type="range" id="rayFovSlider" min="60" max="180" value="180" step="10">
+          <span class="readout" id="rayFovReadout">180°</span>
+        </div>
+        <div class="panel__spacer"></div>
+        <span class="field-label">Автообертання</span>
+        <button class="btn is-active" id="rayAutoBtn">увімк.</button>
+      </div>
+    </div>
+    <p class="caption">Кожен промінь повертає нормалізовану відстань (0–1) до найближчого краю асфальту —
+    саме так модель «відчуває» наближення стіни, не бачачи жодного кадру гри.</p>
+
+    <div class="arch" style="margin-top:48px;">
+      <div class="arch__node">
+        <b>Observation · 13 чисел</b>
+        9 променів + швидкість + sin/cos кута до checkpoint + відстань. Без зображень — вчиться швидко на CPU.
+        <span class="mono-tag">Box(13,)</span>
+      </div>
+      <div class="arch__node">
+        <b>Action · MultiDiscrete</b>
+        Газ (0/1) · кермо 11 щаблів (−100%…100%) · гальмо бінарне. 44 комбінації замість колишніх 132.
+        <span class="mono-tag">[2, 11, 2]</span>
+      </div>
+      <div class="arch__node">
+        <b>Мозок · спільний для всіх</b>
+        Один PPO продовжує на всіх ботах одразу — вони не змагаються, а разом наповнюють один rollout buffer.
+        <span class="mono-tag">MlpPolicy</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REWARD ================= -->
+  <section id="reward">
+    <p class="eyebrow">04 · Функція нагороди</p>
+    <h2 class="section-title">За що бот отримує бали</h2>
+    <p class="section-lede">
+      Reward зібраний ітеративно з реальних спостережень за поведінкою ботів — кожен рядок
+      нижче з'явився у відповідь на конкретну проблему навчання.
+    </p>
+
+    <div class="panel" style="padding: 4px 0;">
+      <table class="reward-table">
+        <thead>
+          <tr><th>Компонент</th><th>Величина</th><th>Навіщо</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Наближення до checkpoint</td>
+            <td class="val"><span class="pill pill--good">+ Δ дуги</span></td>
+            <td>Рахується вздовж дороги (arc length), не по прямій — інакше бот зрізає повороти напростець крізь стіну.</td>
+          </tr>
+          <tr>
+            <td>Checkpoint досягнуто</td>
+            <td class="val"><span class="pill pill--good">+1.0</span></td>
+            <td>Одноразовий бонус за кожен пройдений контрольний пункт.</td>
+          </tr>
+          <tr>
+            <td>Гальмо перед гострим поворотом</td>
+            <td class="val"><span class="pill pill--good">+0.01×v</span></td>
+            <td>Пропорційно швидкості — на низькій швидкості гальмувати нема сенсу, на високій це критично.</td>
+          </tr>
+          <tr>
+            <td>Швидкість руху</td>
+            <td class="val"><span class="pill pill--good">+0.002×v</span></td>
+            <td>Невеликий стимул не тягнути час.</td>
+          </tr>
+          <tr>
+            <td>Застрягання (&lt;50% недавнього максимуму &gt;2с)</td>
+            <td class="val"><span class="pill pill--bad">−0.05/кадр</span></td>
+            <td>Ковзне вікно 5с — не карає природне сповільнення в повороті.</td>
+          </tr>
+          <tr>
+            <td>Виліт за межі (навіть 1 колесо)</td>
+            <td class="val"><span class="pill pill--bad">−10.0</span></td>
+            <td>Миттєве завершення епізоду — без пільгового періоду.</td>
+          </tr>
+          <tr>
+            <td>Стабільно проблемний поворот</td>
+            <td class="val"><span class="pill pill--bad">−3.0</span></td>
+            <td>Якщо ≥30% спроб на цьому сегменті закінчуються вильотом — додатковий штраф, що згасає, коли бот навчається.</td>
+          </tr>
+          <tr>
+            <td>3 кола поспіль без вильоту</td>
+            <td class="val"><span class="pill pill--good">+ до 10.0</span></td>
+            <td>Пропорційно тому, наскільки бот швидший за референсний час (гравця або власний найкращий).</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel" style="margin-top:24px; padding:22px 24px;">
+      <canvas id="rewardChart" style="width:100%; height:220px; display:block;"></canvas>
+      <p class="caption"><b>Симуляція</b> — типова крива сумарного reward за один цикл навчання: різкий провал при перших вильотах,
+      потім стабільне зростання, коли бот засвоює гальмування в поворотах.</p>
+    </div>
+  </section>
+
+  <!-- ================= TRAINING ================= -->
+  <section id="training">
+    <p class="eyebrow">05 · Навчання наживо</p>
+    <h2 class="section-title">Рій ботів на одній трасі</h2>
+    <p class="section-lede">
+      До 24 паралельних <code>SubprocVecEnv</code>-процесів (кожен — окрема OS-копія Python)
+      живлять один спільний PPO. Ліворуч — список ботів, відсортований за поточним reward;
+      праворуч — та сама траса, де всі вони їдуть одночасно.
+    </p>
+
+    <div class="panel">
+      <div class="panel__canvas-area">
+        <canvas id="swarmCanvas"></canvas>
+      </div>
+      <div class="panel__controls">
+        <button class="btn btn--primary" id="swarmToggleBtn">⏸ Пауза</button>
+        <div class="slider-group">
+          <span class="field-label">Швидкість</span>
+          <input type="range" id="swarmSpeedSlider" min="1" max="8" value="3" step="1">
+          <span class="readout" id="swarmSpeedReadout">3x</span>
+        </div>
+        <div class="panel__spacer"></div>
+        <span class="field-label" id="swarmCycleLabel">Циклів до нової траси: 0 / 10</span>
+      </div>
+    </div>
+    <p class="caption">Коли <b>10</b> успішних 3-колових циклів набирається сумарно по всіх ботах —
+    гра сама генерує нову трасу й той самий навчений мозок продовжує на ній без втрати прогресу.
+    <br><b>Тут для наочності показано 10 машинок</b> — у реальному тренуванні їх до 24, більше просто зливається на маленькому екрані.</p>
+
+    <div class="arch" style="margin-top:48px;">
+      <div class="arch__node">
+        <b>Потоки без гонки даних</b>
+        Зміна траси лише кладеться в чергу з головного потоку; сам <code>env_method</code> виконує потік навчання між кроками.
+        <span class="mono-tag">thread-safe queue</span>
+      </div>
+      <div class="arch__node">
+        <b>Автозбереження</b>
+        Кожні 30 хв активного навчання модель зберігається окремим знімком — страховка від краху чи закриття вікна.
+        <span class="mono-tag">logs/models/saves/</span>
+      </div>
+      <div class="arch__node">
+        <b>Continual learning</b>
+        «Зупинити» лише призупиняє процеси; «Продовжити» повертається до тих самих ваг, не починає з нуля.
+        <span class="mono-tag">stop() ≠ shutdown()</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>CarAI — навчальний проєкт: процедурна генерація трас + PPO reinforcement learning.</span>
+    <span>Технічна вітрина · автономний HTML, без залежностей від Python-рантайму.</span>
+  </footer>
+
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- Theme-aware colors (read from CSS custom properties) ----------
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function dpr() { return Math.min(window.devicePixelRatio || 1, 2); }
+
+  function fitCanvas(canvas, cssHeightRatio) {
+    const rect = canvas.getBoundingClientRect();
+    const ratio = dpr();
+    const w = Math.max(rect.width, 10);
+    const h = cssHeightRatio ? w * cssHeightRatio : Math.max(rect.height, 10);
+    canvas.width = Math.round(w * ratio);
+    canvas.height = Math.round(h * ratio);
+    canvas.style.height = cssHeightRatio ? h + 'px' : canvas.style.height;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    return { ctx, w, h };
+  }
+
+  // Seeded PRNG (mulberry32) — deterministic "random" tracks, reproducible.
+  function mulberry32(seed) {
+    return function() {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // ---------- Shared track generation (simplified, mirrors the Python pipeline) ----------
+  function generateTrackPoints(seed, count) {
+    const rng = mulberry32(seed);
+    const pts = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const radius = 130 + rng() * 70;
+      pts.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+    }
+    return pts;
+  }
+
+  // Доцентрова (centripetal, α=0.5) параметризація — на відміну від uniform
+  // Catmull-Rom, відстань між сусідніми точками впливає на розподіл t,
+  // тому криву не "тягне" в петлю на нерівномірно розкиданих control points.
+  function catmullRom(points, samplesPerSeg, closed) {
+    const pts = points;
+    const n = pts.length;
+    const out = [];
+    const get = (i) => pts[((i % n) + n) % n];
+    const ALPHA = 0.5;
+    const knot = (pa, pb, tPrev) => tPrev + Math.pow(Math.hypot(pb.x - pa.x, pb.y - pa.y), ALPHA);
+
+    for (let i = 0; i < n; i++) {
+      const p0 = get(i - 1), p1 = get(i), p2 = get(i + 1), p3 = get(i + 2);
+      const t0 = 0;
+      const t1 = knot(p0, p1, t0);
+      const t2 = knot(p1, p2, t1);
+      const t3 = knot(p2, p3, t2);
+
+      for (let s = 0; s < samplesPerSeg; s++) {
+        const t = t1 + ((t2 - t1) * s) / samplesPerSeg;
+
+        const a1x = ((t1 - t) / (t1 - t0)) * p0.x + ((t - t0) / (t1 - t0)) * p1.x;
+        const a1y = ((t1 - t) / (t1 - t0)) * p0.y + ((t - t0) / (t1 - t0)) * p1.y;
+        const a2x = ((t2 - t) / (t2 - t1)) * p1.x + ((t - t1) / (t2 - t1)) * p2.x;
+        const a2y = ((t2 - t) / (t2 - t1)) * p1.y + ((t - t1) / (t2 - t1)) * p2.y;
+        const a3x = ((t3 - t) / (t3 - t2)) * p2.x + ((t - t2) / (t3 - t2)) * p3.x;
+        const a3y = ((t3 - t) / (t3 - t2)) * p2.y + ((t - t2) / (t3 - t2)) * p3.y;
+
+        const b1x = ((t2 - t) / (t2 - t0)) * a1x + ((t - t0) / (t2 - t0)) * a2x;
+        const b1y = ((t2 - t) / (t2 - t0)) * a1y + ((t - t0) / (t2 - t0)) * a2y;
+        const b2x = ((t3 - t) / (t3 - t1)) * a2x + ((t - t1) / (t3 - t1)) * a3x;
+        const b2y = ((t3 - t) / (t3 - t1)) * a2y + ((t - t1) / (t3 - t1)) * a3y;
+
+        const cx = ((t2 - t) / (t2 - t1)) * b1x + ((t - t1) / (t2 - t1)) * b2x;
+        const cy = ((t2 - t) / (t2 - t1)) * b1y + ((t - t1) / (t2 - t1)) * b2y;
+
+        out.push({ x: cx, y: cy });
+      }
+    }
+    return out;
+  }
+
+  function chaikin(points, iterations, ratio) {
+    let pts = points;
+    for (let it = 0; it < iterations; it++) {
+      const next = [];
+      const n = pts.length;
+      for (let i = 0; i < n; i++) {
+        const p0 = pts[i], p1 = pts[(i + 1) % n];
+        next.push({ x: p0.x + (p1.x - p0.x) * ratio, y: p0.y + (p1.y - p0.y) * ratio });
+        next.push({ x: p0.x + (p1.x - p0.x) * (1 - ratio), y: p0.y + (p1.y - p0.y) * (1 - ratio) });
+      }
+      pts = next;
+    }
+    return pts;
+  }
+
+  function offsetLoop(points, width) {
+    const n = points.length;
+    const left = [], right = [];
+    for (let i = 0; i < n; i++) {
+      const prev = points[(i - 1 + n) % n], next = points[(i + 1) % n];
+      let dx = next.x - prev.x, dy = next.y - prev.y;
+      const len = Math.hypot(dx, dy) || 1;
+      dx /= len; dy /= len;
+      const nx = -dy, ny = dx;
+      left.push({ x: points[i].x + nx * width, y: points[i].y + ny * width });
+      right.push({ x: points[i].x - nx * width, y: points[i].y - ny * width });
+    }
+    return { left, right };
+  }
+
+  function buildTrack(seed) {
+    const controlPoints = generateTrackPoints(seed, 12);
+    const chaikinPts = chaikin(controlPoints, 3, 0.22);
+    const smooth = catmullRom(chaikinPts, 8, true);
+    const { left, right } = offsetLoop(smooth, 26);
+    return { controlPoints, chaikinPts, smooth, left, right };
+  }
+
+  function worldToScreen(p, cx, cy, scale, ox, oy) {
+    return { x: ox + (p.x - cx) * scale, y: oy + (p.y - cy) * scale };
+  }
+
+  function trackBounds(smooth) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of smooth) {
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+    }
+    return { minX, maxX, minY, maxY };
+  }
+
+  function fitTransform(smooth, w, h, margin) {
+    const b = trackBounds(smooth);
+    const spanX = Math.max(b.maxX - b.minX, 1), spanY = Math.max(b.maxY - b.minY, 1);
+    const scale = Math.min((w - margin * 2) / spanX, (h - margin * 2) / spanY);
+    return { cx: (b.minX + b.maxX) / 2, cy: (b.minY + b.maxY) / 2, scale, ox: w / 2, oy: h / 2 };
+  }
+
+  function drawTrackAsphalt(ctx, track, xf) {
+    const asphalt = cssVar('--asphalt');
+    const edge = cssVar('--border');
+    ctx.beginPath();
+    track.left.forEach((p, i) => {
+      const s = worldToScreen(p, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+      i === 0 ? ctx.moveTo(s.x, s.y) : ctx.lineTo(s.x, s.y);
+    });
+    for (let i = track.right.length - 1; i >= 0; i--) {
+      const s = worldToScreen(track.right[i], xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+      ctx.lineTo(s.x, s.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = asphalt;
+    ctx.fill();
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  function drawGrassBg(ctx, w, h) {
+    ctx.fillStyle = cssVar('--grass');
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  // ================= HERO CANVAS =================
+  const heroCanvas = document.getElementById('heroCanvas');
+  let heroSeed = 417213;
+  let heroTrack = buildTrack(heroSeed);
+  let heroCarT = 0;
+
+  function drawHero() {
+    const { ctx, w, h } = fitCanvas(heroCanvas);
+    drawGrassBg(ctx, w, h);
+    const xf = fitTransform(heroTrack.smooth, w, h, 26);
+    drawTrackAsphalt(ctx, heroTrack, xf);
+
+    // checkpoints (subtle)
+    ctx.strokeStyle = cssVar('--cyan');
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 1.2;
+    const step = Math.floor(heroTrack.left.length / 14);
+    for (let i = 0; i < heroTrack.left.length; i += step) {
+      const l = worldToScreen(heroTrack.left[i], xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+      const r = worldToScreen(heroTrack.right[i], xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+      ctx.beginPath(); ctx.moveTo(l.x, l.y); ctx.lineTo(r.x, r.y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // moving car along centerline
+    heroCarT = (heroCarT + 0.0016) % 1;
+    const idx = Math.floor(heroCarT * heroTrack.smooth.length);
+    const p = heroTrack.smooth[idx];
+    const pNext = heroTrack.smooth[(idx + 3) % heroTrack.smooth.length];
+    const s = worldToScreen(p, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+    const angle = Math.atan2(pNext.y - p.y, pNext.x - p.x);
+    drawCarShape(ctx, s.x, s.y, angle, cssVar('--accent-strong'), 9);
+
+    requestAnimationFrame(drawHero);
+  }
+
+  function drawCarShape(ctx, x, y, angle, color, size) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(size, 0);
+    ctx.lineTo(-size * 0.6, size * 0.5);
+    ctx.lineTo(-size * 0.6, -size * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = cssVar('--bg');
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  requestAnimationFrame(drawHero);
+  document.getElementById('hero-seed').textContent = heroSeed;
+
+  // Reseed hero occasionally isn't needed; static seed is fine for a hero shot.
+
+  // ================= TRACK GENERATION PIPELINE DEMO =================
+  const trackCanvas = document.getElementById('trackCanvas');
+  const trackStepLabel = document.getElementById('trackStepLabel');
+  const trackStepCaption = document.getElementById('trackStepCaption');
+  const pipelineListEl = document.getElementById('pipelineList');
+  let pipeSeed = 8842;
+  let pipeState = buildPipelineStages(pipeSeed);
+  let pipeStep = 0;
+  let pipePlaying = false;
+  let pipePlayTimer = null;
+
+  const STEP_CAPTIONS = [
+    'Крок 1 — розкидаємо точки по колу з мінімальною відстанню між ними (Poisson-disk-like).',
+    'Крок 2 — Delaunay-тріангуляція → MST (Prim) → DFS-обхід дерева в гамільтонів цикл.',
+    'Крок 3 — 2-opt усуває самоперетини на графі (індекси, не координати).',
+    'Крок 4 — Chaikin corner-cutting зрізає гострі кути кілька разів поспіль.',
+    'Крок 5 — доцентровий Catmull-Rom згладжує кістяк у плавну криву без петель.',
+    'Крок 6 — офсетні контури фіксованої ширини дають готовий асфальт + checkpoints.',
+  ];
+
+  function buildPipelineStages(seed) {
+    const controlPoints = generateTrackPoints(seed, 12);
+    const chaikinPts = chaikin(controlPoints, 3, 0.22);
+    const smooth = catmullRom(chaikinPts, 8, true);
+    const { left, right } = offsetLoop(smooth, 26);
+    return { controlPoints, chaikinPts, smooth, left, right };
+  }
+
+  function drawPipelineStep(step) {
+    const { ctx, w, h } = fitCanvas(trackCanvas, 0.62);
+    drawGrassBg(ctx, w, h);
+    const xf = fitTransform(pipeState.smooth, w, h, 30);
+
+    const dot = (p, color, r) => {
+      const s = worldToScreen(p, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+      ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.fill();
+    };
+    const polyline = (pts, color, width, close, alpha) => {
+      ctx.globalAlpha = alpha ?? 1;
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const s = worldToScreen(p, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+        i === 0 ? ctx.moveTo(s.x, s.y) : ctx.lineTo(s.x, s.y);
+      });
+      if (close) ctx.closePath();
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+
+    if (step === 0) {
+      pipeState.controlPoints.forEach(p => dot(p, cssVar('--accent-strong'), 4));
+    } else if (step === 1) {
+      polyline(pipeState.controlPoints, cssVar('--cyan'), 1.5, true, 0.9);
+      pipeState.controlPoints.forEach(p => dot(p, cssVar('--accent-strong'), 3.5));
+    } else if (step === 2) {
+      polyline(pipeState.controlPoints, cssVar('--cyan-strong'), 2, true);
+      pipeState.controlPoints.forEach(p => dot(p, cssVar('--accent-strong'), 3.5));
+    } else if (step === 3) {
+      polyline(pipeState.controlPoints, cssVar('--border'), 1, true, 0.5);
+      polyline(pipeState.chaikinPts, cssVar('--cyan-strong'), 2, true);
+    } else if (step === 4) {
+      polyline(pipeState.chaikinPts, cssVar('--border'), 1, true, 0.4);
+      polyline(pipeState.smooth, cssVar('--accent-strong'), 2.4, true);
+    } else if (step === 5) {
+      drawTrackAsphalt(ctx, pipeState, xf);
+      ctx.strokeStyle = cssVar('--cyan');
+      ctx.globalAlpha = 0.4;
+      const chStep = Math.floor(pipeState.left.length / 16);
+      for (let i = 0; i < pipeState.left.length; i += chStep) {
+        const l = worldToScreen(pipeState.left[i], xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+        const r = worldToScreen(pipeState.right[i], xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+        ctx.beginPath(); ctx.moveTo(l.x, l.y); ctx.lineTo(r.x, r.y); ctx.lineWidth = 1.2; ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    trackStepLabel.textContent = `${step + 1} / 6`;
+    trackStepCaption.textContent = STEP_CAPTIONS[step];
+    [...pipelineListEl.children].forEach((li, i) => li.classList.toggle('is-current', i === step));
+  }
+
+  document.getElementById('trackNextBtn').addEventListener('click', () => {
+    pipePlaying = false;
+    clearInterval(pipePlayTimer);
+    pipeStep = (pipeStep + 1) % 6;
+    drawPipelineStep(pipeStep);
+  });
+
+  document.getElementById('trackPlayBtn').addEventListener('click', (e) => {
+    pipePlaying = !pipePlaying;
+    e.target.textContent = pipePlaying ? '⏸ Зупинити' : '▶ Прогнати конвеєр';
+    clearInterval(pipePlayTimer);
+    if (pipePlaying) {
+      pipePlayTimer = setInterval(() => {
+        pipeStep = (pipeStep + 1) % 6;
+        drawPipelineStep(pipeStep);
+        if (pipeStep === 5) { pipePlaying = false; e.target.textContent = '▶ Прогнати конвеєр'; clearInterval(pipePlayTimer); }
+      }, 750);
+    }
+  });
+
+  document.getElementById('trackReseedBtn').addEventListener('click', () => {
+    pipeSeed = Math.floor(Math.random() * 1000000);
+    pipeState = buildPipelineStages(pipeSeed);
+    pipeStep = 0;
+    drawPipelineStep(pipeStep);
+  });
+
+  drawPipelineStep(0);
+  window.addEventListener('resize', () => drawPipelineStep(pipeStep));
+
+  // ================= PHYSICS DEMO (playable bicycle model) =================
+  const physicsCanvas = document.getElementById('physicsCanvas');
+  const physSpeedReadout = document.getElementById('physSpeedReadout');
+  const physTrack = buildTrack(55123);
+
+  const MAX_SPEED = 220, ACCEL = 140, BRAKE_DECEL = 340, DRAG = 40;
+  const MAX_STEER_RATE = 3.6, MIN_STEER_RATE = 1.1, BASE_TRACTION = 10, MIN_TRACTION = 1.6;
+
+  const car = {
+    x: physTrack.smooth[0].x, y: physTrack.smooth[0].y,
+    heading: 0, vx: 0, vy: 0,
+  };
+  const keys = new Set();
+  window.addEventListener('keydown', (e) => { keys.add(e.key.toLowerCase()); });
+  window.addEventListener('keyup', (e) => { keys.delete(e.key.toLowerCase()); });
+
+  function stepCar(dt) {
+    const throttle = keys.has('w') ? 1 : 0;
+    let steer = 0;
+    if (keys.has('a')) steer += 1;
+    if (keys.has('d')) steer -= 1;
+    const brake = keys.has('s') ? 1 : 0;
+
+    const speed = Math.hypot(car.vx, car.vy);
+    const speedFrac = Math.min(speed / MAX_SPEED, 1);
+    const steerRate = MAX_STEER_RATE + (MIN_STEER_RATE - MAX_STEER_RATE) * speedFrac;
+    car.heading += steer * steerRate * dt;
+
+    const hx = Math.cos(car.heading), hy = Math.sin(car.heading);
+    if (throttle > 0) { car.vx += hx * ACCEL * dt; car.vy += hy * ACCEL * dt; }
+
+    let curSpeed = Math.hypot(car.vx, car.vy);
+    if (curSpeed > 1e-6) {
+      const dirx = car.vx / curSpeed, diry = car.vy / curSpeed;
+      const decel = BRAKE_DECEL * brake * dt + DRAG * dt;
+      const newSpeed = Math.max(0, curSpeed - decel);
+      car.vx = dirx * newSpeed; car.vy = diry * newSpeed;
+    }
+
+    curSpeed = Math.hypot(car.vx, car.vy);
+    if (curSpeed > 1e-6) {
+      const traction = BASE_TRACTION + (MIN_TRACTION - BASE_TRACTION) * speedFrac;
+      const blend = Math.min(traction * dt, 1);
+      const dirx = car.vx / curSpeed, diry = car.vy / curSpeed;
+      let nx = dirx * (1 - blend) + hx * blend;
+      let ny = diry * (1 - blend) + hy * blend;
+      const nlen = Math.hypot(nx, ny) || 1;
+      car.vx = (nx / nlen) * curSpeed; car.vy = (ny / nlen) * curSpeed;
+    }
+
+    curSpeed = Math.hypot(car.vx, car.vy);
+    if (curSpeed > MAX_SPEED) { car.vx = car.vx / curSpeed * MAX_SPEED; car.vy = car.vy / curSpeed * MAX_SPEED; }
+
+    car.x += car.vx * dt; car.y += car.vy * dt;
+    physSpeedReadout.textContent = Math.round(curSpeed);
+  }
+
+  let physLastT = performance.now();
+  function drawPhysics(now) {
+    const dt = Math.min((now - physLastT) / 1000, 1 / 20);
+    physLastT = now;
+    stepCar(dt);
+
+    const { ctx, w, h } = fitCanvas(physicsCanvas, 0.62);
+    drawGrassBg(ctx, w, h);
+    const xf = fitTransform(physTrack.smooth, w, h, 30);
+    drawTrackAsphalt(ctx, physTrack, xf);
+
+    const s = worldToScreen({ x: car.x, y: car.y }, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+
+    // velocity vector (cyan)
+    const speed = Math.hypot(car.vx, car.vy);
+    if (speed > 1) {
+      const vAngle = Math.atan2(car.vy, car.vx);
+      ctx.strokeStyle = cssVar('--cyan-strong');
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(s.x, s.y);
+      ctx.lineTo(s.x + Math.cos(vAngle) * 26, s.y + Math.sin(vAngle) * 26);
+      ctx.stroke();
+    }
+    // heading vector (accent)
+    ctx.strokeStyle = cssVar('--accent-strong');
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x + Math.cos(car.heading) * 22, s.y + Math.sin(car.heading) * 22);
+    ctx.stroke();
+
+    drawCarShape(ctx, s.x, s.y, car.heading, cssVar('--text-primary'), 8);
+
+    requestAnimationFrame(drawPhysics);
+  }
+  requestAnimationFrame(drawPhysics);
+  window.addEventListener('resize', () => {});
+
+  // ================= RAYCAST DEMO =================
+  const rayCanvas = document.getElementById('rayCanvas');
+  const rayFovSlider = document.getElementById('rayFovSlider');
+  const rayFovReadout = document.getElementById('rayFovReadout');
+  const rayAutoBtn = document.getElementById('rayAutoBtn');
+  const rayTrack = buildTrack(29310);
+  let rayAuto = true;
+  let rayT = 0.12;
+  let rayFov = 180;
+
+  rayFovSlider.addEventListener('input', () => {
+    rayFov = +rayFovSlider.value;
+    rayFovReadout.textContent = rayFov + '°';
+  });
+  rayAutoBtn.addEventListener('click', () => {
+    rayAuto = !rayAuto;
+    rayAutoBtn.textContent = rayAuto ? 'увімк.' : 'вимк.';
+    rayAutoBtn.classList.toggle('is-active', rayAuto);
+  });
+  rayCanvas.addEventListener('pointermove', (e) => {
+    if (rayAuto) return;
+    const rect = rayCanvas.getBoundingClientRect();
+    rayT = Math.max(0, Math.min(1, e.clientX / rect.width));
+  });
+
+  function segmentIntersect(px, py, dx, dy, x1, y1, x2, y2) {
+    const ex = x2 - x1, ey = y2 - y1;
+    const denom = dx * ey - dy * ex;
+    if (Math.abs(denom) < 1e-9) return null;
+    const t = ((x1 - px) * ey - (y1 - py) * ex) / denom;
+    const u = ((x1 - px) * dy - (y1 - py) * dx) / denom;
+    if (t >= 0 && u >= 0 && u <= 1) return t;
+    return null;
+  }
+
+  function castRays(px, py, heading, edges, rayCount, fovDeg, maxDist) {
+    const results = [];
+    for (let i = 0; i < rayCount; i++) {
+      const angleOffset = rayCount === 1 ? 0 : (-fovDeg / 2 + (fovDeg * i) / (rayCount - 1));
+      const angle = heading + (angleOffset * Math.PI) / 180;
+      const dx = Math.cos(angle), dy = Math.sin(angle);
+      let best = maxDist;
+      for (const [x1, y1, x2, y2] of edges) {
+        const t = segmentIntersect(px, py, dx, dy, x1, y1, x2, y2);
+        if (t !== null && t < best) best = t;
+      }
+      results.push({ angle, dist: best });
+    }
+    return results;
+  }
+
+  function buildEdges(track) {
+    const edges = [];
+    const addLoop = (pts) => {
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], b = pts[(i + 1) % pts.length];
+        edges.push([a.x, a.y, b.x, b.y]);
+      }
+    };
+    addLoop(track.left);
+    addLoop(track.right);
+    return edges;
+  }
+  const rayEdges = buildEdges(rayTrack);
+
+  function drawRayDemo() {
+    if (rayAuto) rayT = (rayT + 0.0011) % 1;
+    const { ctx, w, h } = fitCanvas(rayCanvas, 0.62);
+    drawGrassBg(ctx, w, h);
+    const xf = fitTransform(rayTrack.smooth, w, h, 30);
+    drawTrackAsphalt(ctx, rayTrack, xf);
+
+    const idx = Math.floor(rayT * rayTrack.smooth.length);
+    const p = rayTrack.smooth[idx];
+    const pNext = rayTrack.smooth[(idx + 4) % rayTrack.smooth.length];
+    const heading = Math.atan2(pNext.y - p.y, pNext.x - p.x);
+
+    const maxDist = 200;
+    const rays = castRays(p.x, p.y, heading, rayEdges, 9, rayFov, maxDist);
+
+    const s = worldToScreen(p, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+    rays.forEach((r) => {
+      const ex = p.x + Math.cos(r.angle) * r.dist;
+      const ey = p.y + Math.sin(r.angle) * r.dist;
+      const es = worldToScreen({ x: ex, y: ey }, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+      const t = Math.min(r.dist / maxDist, 1);
+      ctx.strokeStyle = cssVar('--cyan-strong');
+      ctx.globalAlpha = 0.35 + (1 - t) * 0.5;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(es.x, es.y); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(es.x, es.y, 2.4, 0, Math.PI * 2);
+      ctx.fillStyle = cssVar('--accent-strong'); ctx.fill();
+    });
+
+    drawCarShape(ctx, s.x, s.y, heading, cssVar('--text-primary'), 8);
+    requestAnimationFrame(drawRayDemo);
+  }
+  requestAnimationFrame(drawRayDemo);
+  window.addEventListener('resize', () => {});
+
+  // ================= REWARD CHART =================
+  const rewardChart = document.getElementById('rewardChart');
+  function drawRewardChart() {
+    const { ctx, w, h } = fitCanvas(rewardChart);
+    ctx.clearRect(0, 0, w, h);
+
+    const n = 120;
+    const pts = [];
+    let val = -2;
+    const rng = mulberry32(7);
+    for (let i = 0; i < n; i++) {
+      const progress = i / n;
+      const drift = progress < 0.15 ? -0.35 : (0.55 + Math.sin(progress * 6) * 0.12);
+      val += drift * 0.5 + (rng() - 0.5) * 1.4;
+      pts.push(val);
+    }
+    const minV = Math.min(...pts), maxV = Math.max(...pts);
+    const pad = 14;
+    const toY = (v) => h - pad - ((v - minV) / (maxV - minV || 1)) * (h - pad * 2);
+    const toX = (i) => pad + (i / (n - 1)) * (w - pad * 2);
+
+    // zero line
+    ctx.strokeStyle = cssVar('--border');
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(pad, toY(0)); ctx.lineTo(w - pad, toY(0)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // gradient area
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(232,163,61,0.28)');
+    grad.addColorStop(1, 'rgba(232,163,61,0.0)');
+    ctx.beginPath();
+    ctx.moveTo(toX(0), toY(pts[0]));
+    pts.forEach((v, i) => ctx.lineTo(toX(i), toY(v)));
+    ctx.lineTo(toX(n - 1), h - pad); ctx.lineTo(toX(0), h - pad); ctx.closePath();
+    ctx.fillStyle = grad; ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(toX(0), toY(pts[0]));
+    pts.forEach((v, i) => ctx.lineTo(toX(i), toY(v)));
+    ctx.strokeStyle = cssVar('--accent-strong');
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  drawRewardChart();
+  window.addEventListener('resize', drawRewardChart);
+
+  // ================= SWARM TRAINING DEMO =================
+  const swarmCanvas = document.getElementById('swarmCanvas');
+  const swarmToggleBtn = document.getElementById('swarmToggleBtn');
+  const swarmSpeedSlider = document.getElementById('swarmSpeedSlider');
+  const swarmSpeedReadout = document.getElementById('swarmSpeedReadout');
+  const swarmCycleLabel = document.getElementById('swarmCycleLabel');
+  const BOT_NAMES = ['Максім', 'Рейбо', 'Торкар', 'Вілон', 'Зенрекс', 'Кордар', 'Лувін', 'Нетіс', 'Шалон', 'Орлон', 'Марекс', 'Тобо'];
+
+  let swarmTrack = buildTrack(60110);
+  let swarmPlaying = true;
+  let swarmSpeed = 3;
+  let swarmCycles = 0;
+  const BOT_COUNT = 10;
+  const bots = Array.from({ length: BOT_COUNT }, (_, i) => ({
+    t: Math.random(),
+    speed: 0.00035 + Math.random() * 0.0007,
+    reward: Math.random() * 8,
+    name: BOT_NAMES[i % BOT_NAMES.length],
+    laps: 0,
+  }));
+
+  swarmToggleBtn.addEventListener('click', () => {
+    swarmPlaying = !swarmPlaying;
+    swarmToggleBtn.textContent = swarmPlaying ? '⏸ Пауза' : '▶ Продовжити';
+  });
+  swarmSpeedSlider.addEventListener('input', () => {
+    swarmSpeed = +swarmSpeedSlider.value;
+    swarmSpeedReadout.textContent = swarmSpeed + 'x';
+  });
+
+  function drawSwarm() {
+    const { ctx, w, h } = fitCanvas(swarmCanvas, 0.62);
+    drawGrassBg(ctx, w, h);
+    const xf = fitTransform(swarmTrack.smooth, w, h, 30);
+    drawTrackAsphalt(ctx, swarmTrack, xf);
+
+    if (swarmPlaying) {
+      bots.forEach((bot) => {
+        const prevT = bot.t;
+        bot.t += bot.speed * swarmSpeed;
+        if (bot.t >= 1) {
+          bot.t -= 1;
+          bot.laps += 1;
+          bot.reward += 3 + Math.random() * 4;
+          if (bot.laps % 3 === 0) {
+            swarmCycles += 1;
+            if (swarmCycles >= 10) {
+              swarmCycles = 0;
+              swarmTrack = buildTrack(Math.floor(Math.random() * 1000000));
+            }
+          }
+        } else {
+          bot.reward += 0.01 * swarmSpeed;
+        }
+      });
+      swarmCycleLabel.textContent = `Циклів до нової траси: ${swarmCycles} / 10`;
+    }
+
+    const ranked = [...bots].sort((a, b) => b.reward - a.reward);
+
+    bots.forEach((bot) => {
+      const idx = Math.floor(bot.t * swarmTrack.smooth.length);
+      const p = swarmTrack.smooth[idx];
+      const pNext = swarmTrack.smooth[(idx + 3) % swarmTrack.smooth.length];
+      const angle = Math.atan2(pNext.y - p.y, pNext.x - p.x);
+      const s = worldToScreen(p, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+      const isTop = ranked[0] === bot;
+      drawCarShape(ctx, s.x, s.y, angle, isTop ? cssVar('--accent-strong') : cssVar('--cyan-strong'), isTop ? 8 : 6);
+    });
+
+    // Leaderboard mini-panel top-left
+    const boardW = 168, rowH = 20, visible = 6;
+    const boardH = 28 + rowH * visible;
+    ctx.fillStyle = 'color-mix(in srgb, ' + cssVar('--bg-raised') + ' 88%, transparent)';
+    ctx.fillRect(10, 10, boardW, boardH);
+    ctx.strokeStyle = cssVar('--border-soft');
+    ctx.strokeRect(10, 10, boardW, boardH);
+    ctx.fillStyle = cssVar('--accent');
+    ctx.font = '700 11px "JetBrains Mono", monospace';
+    ctx.fillText('БОТИ', 20, 26);
+    ranked.slice(0, visible).forEach((bot, i) => {
+      const y = 26 + rowH * (i + 1);
+      ctx.fillStyle = i === 0 ? cssVar('--good') : cssVar('--text-secondary');
+      ctx.font = (i === 0 ? '700 ' : '400 ') + '11px "JetBrains Mono", monospace';
+      ctx.fillText(`${i + 1}. ${bot.name}`, 20, y);
+      ctx.textAlign = 'right';
+      ctx.fillText(bot.reward.toFixed(1), 10 + boardW - 12, y);
+      ctx.textAlign = 'left';
+    });
+
+    requestAnimationFrame(drawSwarm);
+  }
+  requestAnimationFrame(drawSwarm);
+  window.addEventListener('resize', () => {});
+
+})();
+</script>
