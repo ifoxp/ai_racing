@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import arcade
 import arcade.gui
+import numpy as np
 
 import theme
 
@@ -127,7 +128,15 @@ class IconButton:
         arcade.draw_lrbt_rectangle_outline(left, right, bottom, top, border, border_width=1.5)
 
         cx, cy = self.x, self.y
-        if self.icon == "copy":
+        if self.icon == "reset":
+            # кругова стрілка проти годинникової — "скинути до дефолту"
+            s = self.size * 0.28
+            arcade.draw_arc_outline(cx, cy, s * 2, s * 2, ink, start_angle=-60, end_angle=200, border_width=1.8)
+            tip_angle = np.radians(200)
+            tx = cx + s * np.cos(tip_angle)
+            ty = cy + s * np.sin(tip_angle)
+            arcade.draw_triangle_filled(tx - 3, ty + 1, tx + 3, ty + 3, tx + 1, ty - 4, ink)
+        elif self.icon == "copy":
             # дві рамки внахлест — класичний піктограма "копіювати"
             s = self.size * 0.22
             arcade.draw_lrbt_rectangle_outline(cx - s * 1.4, cx + s * 0.6, cy - s * 0.6, cy + s * 1.4, ink, border_width=1.4)
@@ -468,10 +477,9 @@ class SidePanel:
         # з власною копією torch у пам'яті (Windows spawn, не fork); 50+
         # ботів на звичайній машині впирається в ліміт файлу підкачки і
         # валить процес MemoryError-ами (перевірено на практиці).
+        # Слайдери ваг reward звідси прибрано — всі налаштування нагород
+        # тепер у власній вкладці "Налаштування" (settings_ui.py).
         self.bot_count_stepper = Stepper(0, 0, width=140, value=16, min_value=1, max_value=24, step=1)
-        self.reward_checkpoint_slider = LabeledSlider(self.ui_manager, "checkpoint", value=1.0, min_value=0.0, max_value=3.0)
-        self.reward_speed_slider = LabeledSlider(self.ui_manager, "швидкість", value=1.0, min_value=0.0, max_value=3.0)
-        self.reward_penalty_slider = LabeledSlider(self.ui_manager, "штраф за виліт", value=1.0, min_value=0.0, max_value=3.0)
 
         # --- Збереження моделі: назва для запису + перемикач для вибору файлу
         # для завантаження (клік по "Завантажити" гортає список наявних) ---
@@ -559,14 +567,7 @@ class SidePanel:
         self._bot_count_label.x = content_x
         self._bot_count_label.y = y
         self.bot_count_stepper.move(content_x, y - 20)
-        y -= 52
-
-        self.reward_checkpoint_slider.move(content_x, content_width, y)
-        y -= 38
-        self.reward_speed_slider.move(content_x, content_width, y)
-        y -= 38
-        self.reward_penalty_slider.move(content_x, content_width, y)
-        y -= 46
+        y -= 60
 
         # --- Секція: НАВЧАННЯ (Етап 4) ---
         next_section("НАВЧАННЯ")
@@ -577,11 +578,14 @@ class SidePanel:
         # Швидкість симуляції під час тренування — клікабельна плашка з
         # фіксованим списком значень (speed_options), клік гортає далі по
         # колу. Впливає лише на RL-тренування, не на гру гравця.
+        # Кнопка 32px заввишки з центром у y: підпис і підказка — ДВА рядки
+        # всередині неї, центровані як пара (раніше підпис був на y-8, а
+        # підказка взагалі під нижнім краєм кнопки — виглядало зсунутим).
         place_button("speed_option", content_x, content_width, 32, "", True)
         self._speed_label.x = content_x
-        self._speed_label.y = y - 8
+        self._speed_label.y = y + 5
         self._speed_hint_text.x = content_x
-        self._speed_hint_text.y = y - 22
+        self._speed_hint_text.y = y - 8
         y -= 44
 
         self.show_rays_checkbox.move(content_x - content_width / 2 + 9, y)
@@ -662,9 +666,6 @@ class SidePanel:
         self._bot_count_label.color = theme.TEXT_SECONDARY if not training_locked else theme.TEXT_FAINT
         self._bot_count_label.draw()
         self.bot_count_stepper.draw()
-        for slider in (self.reward_checkpoint_slider, self.reward_speed_slider, self.reward_penalty_slider):
-            slider.enabled = not training_locked
-            slider.draw()
 
         self._speed_label.text = f"швидкість тренування: {self.speed_multiplier}x"
         self._speed_label.draw()

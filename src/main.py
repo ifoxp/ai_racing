@@ -18,10 +18,15 @@ from bot_panel import BotPanel, ControlsIndicator
 from car import CAR_LENGTH, CAR_WIDTH, CarState, step_car
 from lap_tracker import GhostPlayer, LapTracker
 from leaderboard import Leaderboard
-from race_mode import MAX_LIST_HEIGHT, ModelPickerPanel, RaceSession, list_available_models
-from rl_env import RAY_ANGLES_DEG
+from race_mode import (
+    MAX_LIST_HEIGHT, ModelPickerPanel, RaceInfoPanel, RaceSession,
+    list_available_models, read_model_meta,
+)
+from rl_env import RAY_COUNT
+from settings import load_config, save_config
+from settings_ui import SettingsPanel
 from track_generator import Track, generate_track
-from trainer import BackgroundTrainer, RewardWeights
+from trainer import BackgroundTrainer
 from ui_panel import Button, SidePanel, TabBar, seed_from_text
 
 BOT_PANEL_GAP = 12
@@ -82,16 +87,31 @@ class CarAIWindow(arcade.Window):
         self.bot_panel = BotPanel(x=16, y=self.window_height - 48 - Leaderboard.HEIGHT - BOT_PANEL_GAP)
         self.controls_indicator = ControlsIndicator(x=16, y=48)
         self._load_selection_idx = 0  # який файл у logs/models/seed_<seed>/ обрано для наступного "Завантажити"
+        self._models_list_cache: tuple[float, list[Path]] | None = None  # TTL-кеш _list_saved_models
+
+        # --- Налаштування нагород/променів (вкладка "Налаштування") ---
+        # Завантажується з logs/config.json — переживає перезапуск гри.
+        self.reward_config = load_config()
+        self._ray_angles = self.reward_config.full_ray_angles()  # кеш для рендеру променів
+        self.settings_panel = SettingsPanel(
+            window=self, panel_x=self.viewport_width + PANEL_WIDTH / 2,
+            panel_width=PANEL_WIDTH, window_height=self.window_height,
+            config=self.reward_config,
+        )
 
         # --- Режим "Заїзди" (готові моделі, без навчання) ---
-        self.mode = "train"  # "train" | "races"
+        self.mode = "train"  # "train" | "races" | "settings"
         self.tab_bar = TabBar(
-            x=self.viewport_width / 2, y=self.window_height - 24, width=280, height=36,
-            tabs=[("train", "Навчання"), ("races", "Заїзди")],
+            x=self.viewport_width / 2, y=self.window_height - 24, width=420, height=36,
+            tabs=[("train", "Навчання"), ("races", "Заїзди"), ("settings", "Налаштування")],
         )
         model_picker_y = self.window_height - 88
         self.model_picker = ModelPickerPanel(x=16, y=model_picker_y)
         self.race_session: RaceSession | None = None
+        self.race_info_panel = RaceInfoPanel(
+            panel_x=self.viewport_width + PANEL_WIDTH / 2,
+            panel_width=PANEL_WIDTH, window_height=self.window_height,
+        )
         # Кнопка старту одразу під списком моделей — 30 (заголовок) +
         # MAX_LIST_HEIGHT (список, якщо він повністю розгорнутий) + відступ.
         race_button_y = model_picker_y - 30 - MAX_LIST_HEIGHT - 24
@@ -114,6 +134,12 @@ class CarAIWindow(arcade.Window):
         self.frame_times: list[float] = []
         self._last_frame_stamp = time.perf_counter()
 
+        # Інтерполяція позицій ботів навчання для рендеру: снапшоти приходять
+        # 15 разів/с на 1x (один крок VecEnv = PHYSICS_SUBSTEPS кадрів фізики),
+        # а вікно малює 60 — без інтерполяції машинки рухались би "стрибками".
+        # bot_id -> {prev/cur поза, момент останньої зміни, виміряний інтервал}.
+        self._bot_interp: dict[int, dict] = {}
+
         self._generate_new_track(seed=random.randint(0, 1_000_000))
 
     def _set_train_button_label(self, label: str) -> None:
@@ -128,14 +154,36 @@ class CarAIWindow(arcade.Window):
         return MODELS_DIR
 
     def _list_saved_models(self) -> list[Path]:
-        return sorted(self._models_dir().glob("*.zip"), key=lambda p: p.name.lower())
+        """Моделі для "Завантажити" у вкладці навчання — лише ручні збереження
+        (без autosave), і лише сумісні з поточною кількістю променів: модель
+        зі старим obs_dim все одно впала б при PPO.load в живий VecEnv.
+
+        Кешується на 1с: викликається з on_draw щокадру (через
+        _current_load_selection_label), а всередині — glob+stat по диску.
+        60 сканувань папки щосекунди — одне з джерел мікрофризів."""
+        now = time.perf_counter()
+        if self._models_list_cache is not None and now - self._models_list_cache[0] < 1.0:
+            return self._models_list_cache[1]
+        expected_obs_dim = RAY_COUNT + 4  # промені + швидкість + sin/cos + відстань
+        result = []
+        for path in sorted(self._models_dir().glob("*.zip"), key=lambda p: p.name.lower()):
+            _, obs_dim = read_model_meta(path)
+            if obs_dim is None or obs_dim == expected_obs_dim:
+                result.append(path)
+        self._models_list_cache = (now, result)
+        return result
 
     def _current_load_selection_label(self) -> str | None:
         models = self._list_saved_models()
         if not models:
             return None
         idx = self._load_selection_idx % len(models)
-        return models[idx].stem
+        path = models[idx]
+        steps, _ = read_model_meta(path)
+        if steps is None:
+            return path.stem
+        steps_label = f"{steps / 1_000_000:.1f}M" if steps >= 1_000_000 else f"{steps / 1000:.0f}K" if steps >= 1000 else str(steps)
+        return f"{path.stem} · {steps_label} кроків"
 
     def _save_model(self) -> None:
         if self.trainer is None:
@@ -145,6 +193,7 @@ class CarAIWindow(arcade.Window):
         if self.trainer.save(str(path)):
             logger.info("Модель збережена: %s", path)
             self._load_selection_idx = 0
+            self._models_list_cache = None  # щойно з'явився новий файл — кеш застарів
 
     def _cycle_load_selection(self, direction: int) -> None:
         """Гортає список збережених моделей (стрілки ◁/▷) — саме лише не
@@ -173,19 +222,12 @@ class CarAIWindow(arcade.Window):
         self.trainer = BackgroundTrainer(
             self.track, reference_time=self.lap_tracker.best_time if self.lap_tracker else None,
             bot_count=self.panel.bot_count_stepper.value,
-            reward_weights=self._read_reward_weights(),
+            config=self.reward_config,
         )
         self.trainer.request_load(str(path))
         self.trainer.start()
         self._set_train_button_label("Запускається…")
         logger.info("Завантажено модель: %s", path)
-
-    def _read_reward_weights(self) -> RewardWeights:
-        return RewardWeights(
-            checkpoint=self.panel.reward_checkpoint_slider.value,
-            speed=self.panel.reward_speed_slider.value,
-            out_of_bounds_penalty=self.panel.reward_penalty_slider.value,
-        )
 
     def _generate_new_track(self, seed: int) -> None:
         start = time.perf_counter()
@@ -225,7 +267,7 @@ class CarAIWindow(arcade.Window):
         # геометрію в ІСНУЮЧИХ процесах (update_track, дешево), той самий
         # навчений мозок продовжує на новій трасі. Перестворюємо
         # BackgroundTrainer лише коли VecEnv ще НІКОЛИ не піднімався (немає
-        # чого зберігати) — тоді підхоплюємо актуальні bot_count/reward_weights
+        # чого зберігати) — тоді підхоплюємо актуальні bot_count/config
         # з панелі налаштувань.
         reference_time = self.lap_tracker.best_time if self.lap_tracker is not None else None
         if self.trainer is not None and self.trainer.vec_env is not None:
@@ -236,13 +278,14 @@ class CarAIWindow(arcade.Window):
             self.trainer = BackgroundTrainer(
                 track, reference_time=reference_time,
                 bot_count=self.panel.bot_count_stepper.value,
-                reward_weights=self._read_reward_weights(),
+                config=self.reward_config,
             )
             self.panel.buttons["train_start"].label = "Почати навчання"
             self.panel.buttons["train_start"]._text.text = "Почати навчання"
         self.bot_panel.scroll_offset = 0.0
         self.bot_panel.selected_bot_id = None
         self._load_selection_idx = 0
+        self._bot_interp.clear()
 
         if self.race_session is not None:
             self.race_session.set_track(track)
@@ -418,6 +461,43 @@ class CarAIWindow(arcade.Window):
         center_screen = self._world_to_screen_point(self.car.position)
         arcade.draw_line(center_screen[0], center_screen[1], nose_screen[0], nose_screen[1], theme.BG, line_width=2)
 
+    def _interpolated_pose(self, snapshot) -> tuple[np.ndarray, float]:
+        """Позиція/кут бота для РЕНДЕРУ — плавно ковзає між двома останніми
+        снапшотами замість стрибка раз на крок VecEnv. Чиста косметика:
+        навчання про це не знає, а картинка відстає від "правди" максимум на
+        один інтервал снапшотів (~67 мс на 1x) — для ока непомітно."""
+        now = time.perf_counter()
+        state = self._bot_interp.get(snapshot.bot_id)
+        if state is None:
+            state = {
+                "prev_pos": snapshot.position.copy(), "prev_heading": snapshot.heading,
+                "cur_pos": snapshot.position.copy(), "cur_heading": snapshot.heading,
+                "switch": now, "interval": 4 / 60,
+            }
+            self._bot_interp[snapshot.bot_id] = state
+        elif not np.array_equal(state["cur_pos"], snapshot.position) or state["cur_heading"] != snapshot.heading:
+            # Новий снапшот — поточна поза стає "попередньою", інтервал
+            # міряється фактичний (він залежить від speed_multiplier).
+            state["prev_pos"] = state["cur_pos"]
+            state["prev_heading"] = state["cur_heading"]
+            state["cur_pos"] = snapshot.position.copy()
+            state["cur_heading"] = snapshot.heading
+            state["interval"] = min(max(now - state["switch"], 1 / 120), 0.25)
+            state["switch"] = now
+
+        # Телепорт (respawn після вильоту, нова траса) — без інтерполяції,
+        # інакше машинка "пролетіла" б через пів карти за кілька кадрів.
+        if np.linalg.norm(state["cur_pos"] - state["prev_pos"]) > 60.0:
+            return state["cur_pos"], state["cur_heading"]
+
+        alpha = min(1.0, (now - state["switch"]) / state["interval"])
+        pos = state["prev_pos"] * (1.0 - alpha) + state["cur_pos"] * alpha
+        # Кут — найкоротшою дугою (інакше перехід через ±π крутив би машину
+        # на повний оберт у зворотний бік).
+        dh = (state["cur_heading"] - state["prev_heading"] + np.pi) % (2 * np.pi) - np.pi
+        heading = state["prev_heading"] + dh * alpha
+        return pos, heading
+
     def _draw_bots(self) -> None:
         """Малює всіх ботів, чия кількість наразі обрана у BotPanel (список
         видимих обрізається за поточним reward — найкращі зверху, як і в
@@ -440,12 +520,13 @@ class CarAIWindow(arcade.Window):
         # яскравішим кольором — щоб не губився серед інших машинок на трасі.
         for snapshot in sorted(ranked, key=lambda s: s.bot_id == selected_id):
             is_selected = snapshot.bot_id == selected_id
+            draw_pos, draw_heading = self._interpolated_pose(snapshot)
             if show_rays or is_selected:
                 ray_alpha = 200 if is_selected else 90
-                for dist, angle_deg in zip(snapshot.ray_distances, RAY_ANGLES_DEG):
-                    angle = snapshot.heading + np.radians(angle_deg)
-                    end_world = snapshot.position + np.array([np.cos(angle), np.sin(angle)]) * dist
-                    start_screen = self._world_to_screen_point(snapshot.position)
+                for dist, angle_deg in zip(snapshot.ray_distances, self._ray_angles):
+                    angle = draw_heading + np.radians(angle_deg)
+                    end_world = draw_pos + np.array([np.cos(angle), np.sin(angle)]) * dist
+                    start_screen = self._world_to_screen_point(draw_pos)
                     end_screen = self._world_to_screen_point(end_world)
                     arcade.draw_line(start_screen[0], start_screen[1], end_screen[0], end_screen[1], theme.CYAN + (ray_alpha,), line_width=1.0)
 
@@ -456,14 +537,17 @@ class CarAIWindow(arcade.Window):
             # розміру машини, рендер тут ніяк на це не впливає). Але щоб не
             # створювати навіть візуальної плутанини — виділяємо лише
             # кольором і товщою обвідкою, розмір завжди справжній.
-            c, s = np.cos(snapshot.heading), np.sin(snapshot.heading)
+            c, s = np.cos(draw_heading), np.sin(draw_heading)
             rot = np.array([[c, -s], [s, c]])
-            corners = car_shape @ rot.T + snapshot.position
+            corners = car_shape @ rot.T + draw_pos
             screen_corners = [self._world_to_screen_point(p) for p in corners]
-            fill_color = theme.ACCENT_STRONG if is_selected else theme.CYAN
-            outline_width = 2.5 if is_selected else 1.2
-            arcade.draw_polygon_filled(screen_corners, fill_color + (255,))
-            arcade.draw_polygon_outline(screen_corners, theme.BG, line_width=outline_width)
+            # Кожен бот у власному кольорі з палітри (snapshot.color) —
+            # виділений відрізняється акцентною товстою обвідкою, а не
+            # підміною кольору (щоб не губити "хто це" при виділенні).
+            outline_color = theme.ACCENT_STRONG if is_selected else theme.BG
+            outline_width = 3.0 if is_selected else 1.2
+            arcade.draw_polygon_filled(screen_corners, snapshot.color + (255,))
+            arcade.draw_polygon_outline(screen_corners, outline_color, line_width=outline_width)
 
     def _draw_race_cars(self) -> None:
         """Аналог _draw_bots(), але для режиму "Заїзди" — кожна машина у
@@ -490,10 +574,12 @@ class CarAIWindow(arcade.Window):
         # Viewport — трава
         arcade.draw_lrbt_rectangle_filled(0, self.viewport_width, 0, self.window_height, theme.GRASS)
 
-        if self.track is not None and self._asphalt_shapes is not None:
-            self._asphalt_shapes.draw()
-
-        self._draw_checkpoints()
+        # У вкладці налаштувань траса не малюється — там прев'ю променів
+        # на чистому фоні, трасу під ним було б зайвим шумом.
+        if self.mode != "settings":
+            if self.track is not None and self._asphalt_shapes is not None:
+                self._asphalt_shapes.draw()
+            self._draw_checkpoints()
 
         if self.mode == "train":
             self._draw_problematic_segments()
@@ -536,14 +622,20 @@ class CarAIWindow(arcade.Window):
                 seed=self.seed, track_ms=self.last_generation_ms, training_locked=training_locked,
                 load_selection_label=self._current_load_selection_label(),
             )
-        else:  # "races"
+        elif self.mode == "races":
             self._draw_race_cars()
-            models = list_available_models(MODELS_DIR)
+            models = list_available_models(MODELS_DIR, expected_obs_dim=RAY_COUNT + 4)
             self.model_picker.draw(models)
             self.race_start_button.label = "Зупинити заїзд" if self.race_session is not None else "Почати заїзд"
             self.race_start_button._text.text = self.race_start_button.label
-            self.race_start_button.enabled = self.race_session is not None or bool(self.model_picker.selected)
+            self.race_start_button.enabled = self.race_session is not None or self.model_picker.any_selected
             self.race_start_button.draw()
+            self.race_info_panel.draw(self.race_session)
+        else:  # "settings"
+            # Прев'ю: машинка з віялом променів у центрі viewport — кути
+            # читаються з полів наживо, ще до натискання "Застосувати".
+            self.settings_panel.draw_preview(self.viewport_width / 2, self.window_height / 2)
+            self.settings_panel.draw()
 
         self.tab_bar.draw()
 
@@ -563,6 +655,8 @@ class CarAIWindow(arcade.Window):
             self.frame_times.pop(0)
         self._last_frame_stamp = now
         self.panel.on_update(delta_time)
+        if self.mode == "settings":
+            self.settings_panel.on_update(delta_time)
 
         if self.mode == "train" and self.trainer is not None:
             self.trainer.speed_multiplier = self.panel.speed_multiplier
@@ -629,34 +723,87 @@ class CarAIWindow(arcade.Window):
         self.model_picker.move(x=16, y=model_picker_y)
         race_button_y = model_picker_y - 30 - MAX_LIST_HEIGHT - 24
         self.race_start_button.move(x=16 + self.model_picker.width / 2, y=race_button_y)
+        self.race_info_panel.relayout(
+            panel_x=self.viewport_width + PANEL_WIDTH / 2, window_height=self.window_height,
+        )
+        self.settings_panel.relayout(
+            panel_x=self.viewport_width + PANEL_WIDTH / 2, window_height=self.window_height,
+        )
 
         if self.track is not None:
             self._rebuild_screen_transform()
             self._build_render_cache()
 
+    def _switch_mode(self, mode: str) -> None:
+        """Перемикання вкладки. UIManager-и текстових полів вмикаються лише
+        для активної вкладки — інакше невидимі поля інших вкладок
+        перехоплювали б кліки на тих самих екранних координатах."""
+        self.mode = mode
+        if mode == "settings":
+            self.panel.ui_manager.disable()
+            self.settings_panel.ui_manager.enable()
+        elif mode == "train":
+            self.settings_panel.ui_manager.disable()
+            self.panel.ui_manager.enable()
+        else:  # races — текстових полів немає взагалі
+            self.panel.ui_manager.disable()
+            self.settings_panel.ui_manager.disable()
+
+    def _apply_settings(self) -> None:
+        """"Застосувати" у вкладці налаштувань: зберегти на диск і розіслати
+        в живі процеси навчання (queued env_method — безпечно навіть під
+        час активного тренування)."""
+        cfg = self.settings_panel.read_config()
+        self.reward_config = cfg
+        self._ray_angles = cfg.full_ray_angles()
+        self.settings_panel.set_config(cfg)
+        save_config(cfg)
+        if self.trainer is not None:
+            self.trainer.update_reward_config(cfg)
+        logger.info("Налаштування застосовано: %s", cfg)
+
     def on_mouse_motion(self, x: int, y: int, dx: int, dy: int) -> None:
         if self.mode == "train":
             self.panel.on_mouse_motion(x, y)
+        elif self.mode == "races":
+            self.race_info_panel.on_mouse_motion(x, y)
+            self.race_start_button.hovered = self.race_start_button.enabled and self.race_start_button.contains(x, y)
+        else:
+            self.settings_panel.on_mouse_motion(x, y)
 
     def on_mouse_scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
         if self.mode == "train":
             self.bot_panel.on_mouse_scroll(x, y, scroll_y)
-        else:
+        elif self.mode == "races":
             self.model_picker.on_mouse_scroll(x, y, scroll_y)
 
     def on_mouse_press(self, x: int, y: int, button: int, modifiers: int) -> None:
         tab_action = self.tab_bar.on_mouse_press(x, y)
         if tab_action is not None:
-            self.mode = tab_action
+            self._switch_mode(tab_action)
+            return
+
+        if self.mode == "settings":
+            if self.settings_panel.on_mouse_press(x, y) == "apply":
+                self._apply_settings()
             return
 
         if self.mode == "races":
             self.model_picker.on_mouse_press(x, y)
+            if self.race_info_panel.on_mouse_press(x, y) == "new_track":
+                self._generate_new_track(seed=random.randint(0, 1_000_000))
+                return
             if self.race_start_button.enabled and self.race_start_button.contains(x, y):
                 if self.race_session is not None:
                     self.race_session = None
-                elif self.model_picker.selected and self.track is not None:
-                    self.race_session = RaceSession(self.track, self.model_picker.selected_paths())
+                elif self.model_picker.any_selected and self.track is not None:
+                    try:
+                        self.race_session = RaceSession(
+                            self.track, self.model_picker.selected_paths(),
+                            config=self.reward_config,
+                        )
+                    except Exception:
+                        logger.exception("Не вдалося запустити заїзд")
             return
 
         self.bot_panel.on_mouse_press(x, y)
@@ -706,7 +853,7 @@ class CarAIWindow(arcade.Window):
                     self.trainer = BackgroundTrainer(
                         self.track, reference_time=self.trainer.reference_time,
                         bot_count=self.panel.bot_count_stepper.value,
-                        reward_weights=self._read_reward_weights(),
+                        config=self.reward_config,
                     )
                     self.trainer.start()
                     # Піднімання N паралельних процесів на Windows займає до
@@ -725,9 +872,11 @@ class CarAIWindow(arcade.Window):
             self._cycle_load_selection(1)
 
     def on_key_press(self, symbol: int, modifiers: int) -> None:
-        # Поки якесь текстове поле активне (seed чи назва моделі), WASD має
-        # друкувати текст, а не керувати машиною.
+        # Поки якесь текстове поле активне (seed, назва моделі чи поля
+        # налаштувань), WASD/R мають друкувати текст, а не керувати грою.
         if self.panel.seed_input.active or self.panel.model_name_input.active:
+            return
+        if self.mode == "settings" and self.settings_panel.any_input_active:
             return
         if symbol == arcade.key.R:
             self._generate_new_track(seed=random.randint(0, 1_000_000))

@@ -22,22 +22,21 @@ import numpy as np
 from gymnasium import spaces
 
 from car import CAR_LENGTH, CAR_WIDTH, CarState, step_car
+from settings import RewardConfig
 from track_generator import Track
 
 # --- Raycast ---
 RAY_MAX_DISTANCE = 200.0
-# Передньо-бокове віяло (відносно heading, напрямку капота) — нерівномірне:
-# густіше по центру (±5°), рідше до країв (±35°, ±50°, ±90°). Променя точно
-# на 0° немає свідомо (запит користувача): ±5° і так майже дивляться вперед,
-# а третій промінь у тому ж пучку (0°) дублював би їх — сильно корельований
-# вхід, який лише витрачає ємність мережі, не додаючи інформації.
-_FRONT_SIDE_ANGLES_DEG = [-90, -50, -35, -5, 5, 35, 50, 90]
-# Задні промені (±135°, 180°) — не для звичайної їзди (перед машиною завжди
-# важливіше), а для дрифту: коли velocity відхиляється від heading, саме
-# задня частина корпусу заносить до бордюру з боку, куди машину несе. Без
-# них бот не бачив, що "жопа" вже майже за межею траси під час заносу.
-_REAR_ANGLES_DEG = [-180, -135, 135]
-RAY_ANGLES_DEG = np.array(_FRONT_SIDE_ANGLES_DEG + _REAR_ANGLES_DEG, dtype=np.float64)
+# Кути променів живуть у settings.RewardConfig (редаговані з UI, вкладка
+# "Налаштування") — тут лишається тільки дефолтний набір і фіксована
+# КІЛЬКІСТЬ. Кількість міняти не можна: вона визначає розмір observation,
+# і будь-яка зміна робить усі збережені моделі несумісними. Дефолтне віяло:
+# ±5°, ±20°, ±40°, ±65° (перед, крок плавно наростає, без "дірок" у зоні
+# входу в поворот), ±90° (боки), ±110°, ±140° (зад-діагоналі для дрифту —
+# корму зносить убік-назад саме в зону 100-140° від осі). Строго 0° і 180°
+# немає свідомо: 0° дублював би ±5°, а 180° дивиться на щойно пройдену
+# дорогу — майже завжди константа "далеко".
+RAY_ANGLES_DEG = RewardConfig().full_ray_angles()
 RAY_COUNT = len(RAY_ANGLES_DEG)
 
 # --- Action discretization ---
@@ -48,9 +47,9 @@ BRAKE_LEVELS = 2     # бінарне — 0% або 100%, як і газ. Про
                       # поворотах (користувач: 5хв не вистачило на поворот 90°)
 
 # --- Reward ---
-CHECKPOINT_BONUS = 1.0
-SPEED_REWARD_SCALE = 0.002
-OUT_OF_BOUNDS_PENALTY = -10.0
+# Числові розміри нагород переїхали в settings.RewardConfig (редаговані
+# з UI). Тут лишаються тільки структурні пороги, які визначають МЕХАНІКУ,
+# а не баланс (їх зміна ламала б семантику, а не тюнила поведінку).
 MAX_EPISODE_SECONDS = 60.0
 
 # Коло само по собі більше НЕ завершує епізод — бот продовжує їхати далі
@@ -67,7 +66,6 @@ MAX_LAPS_PER_EPISODE = 3
 SPEED_WINDOW_SECONDS = 5.0
 SPEED_LOW_FRACTION = 0.5     # поріг: "повільно" = менше половини недавнього максимуму
 SPEED_LOW_GRACE_SECONDS = 2.0  # стільки можна їхати повільно без кари (розгін після старту/повороту)
-SPEED_LOW_PENALTY = -0.05     # щокадровий штраф, поки триває
 
 # Прямий бонус за гальмування перед гострим поворотом — без нього PPO
 # знаходить "простіший" спосіб пройти поворот (просто відпустити газ, drag
@@ -82,7 +80,6 @@ SPEED_LOW_PENALTY = -0.05     # щокадровий штраф, поки три
 # гальмування критичне для проходження повороту без вильоту.
 SHARP_TURN_ANGLE_DEG = 45.0     # від цього кута поворот вважається "гострим"
 SHARP_TURN_BRAKE_DISTANCE = 80.0  # у межах цієї відстані до checkpoint бонус активний
-SHARP_TURN_BRAKE_SCALE = 0.01    # бонус = SHARP_TURN_BRAKE_SCALE * швидкість, поки brake=1 в зоні
 
 
 def _build_edge_segments(left_edge: np.ndarray, right_edge: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -102,19 +99,22 @@ def _build_edge_segments(left_edge: np.ndarray, right_edge: np.ndarray) -> tuple
 def cast_rays_vectorized(position: np.ndarray, heading: float,
                           seg_p1: np.ndarray, seg_p2: np.ndarray,
                           max_distance: float = RAY_MAX_DISTANCE,
-                          local_radius: float = RAY_MAX_DISTANCE * 1.5) -> np.ndarray:
+                          local_radius: float = RAY_MAX_DISTANCE * 1.5,
+                          ray_angles_deg: np.ndarray | None = None) -> np.ndarray:
     """Векторизована версія: усі промені проти всіх (локально відібраних)
     відрізків одним numpy-проходом, без Python-циклів. ~100x швидше за наївний
     подвійний цикл (критично — викликається щокадру для кожного агента)."""
+    if ray_angles_deg is None:
+        ray_angles_deg = RAY_ANGLES_DEG
     # Локальний відбір: тільки відрізки, чий будь-який кінець близько до машини.
     mid = (seg_p1 + seg_p2) / 2.0
     nearby = np.linalg.norm(mid - position, axis=1) <= local_radius
     p1 = seg_p1[nearby]
     p2 = seg_p2[nearby]
     if len(p1) == 0:
-        return np.full(RAY_COUNT, max_distance)
+        return np.full(len(ray_angles_deg), max_distance)
 
-    angles = heading + np.radians(RAY_ANGLES_DEG)
+    angles = heading + np.radians(ray_angles_deg)
     directions = np.column_stack([np.cos(angles), np.sin(angles)])  # (RAY_COUNT, 2)
 
     v2 = p2 - p1  # (S, 2) — напрямки відрізків
@@ -190,8 +190,7 @@ class CarRacingEnv(gym.Env):
 
     def __init__(self, track: Track, half_track_width: float = 22.0,
                  reference_time: float | None = None, physics_substeps: int = 1,
-                 checkpoint_weight: float = 1.0, speed_weight: float = 1.0,
-                 out_of_bounds_weight: float = 1.0):
+                 config: RewardConfig | None = None):
         super().__init__()
         self.track = track
         self.half_track_width = half_track_width
@@ -199,11 +198,12 @@ class CarRacingEnv(gym.Env):
         self.physics_substeps = physics_substeps
         self.dt = 1.0 / 60.0
 
-        # Множники компонентів reward — керовані з UI перед стартом навчання
-        # (панель налаштувань), 1.0 = базова поведінка, узгоджена раніше.
-        self.checkpoint_weight = checkpoint_weight
-        self.speed_weight = speed_weight
-        self.out_of_bounds_weight = out_of_bounds_weight
+        # Всі числові розміри нагород + кути променів — з config (вкладка
+        # "Налаштування" в UI). Кути тримаються атрибутом ЕКЗЕМПЛЯРА, а не
+        # модульною константою — set_reward_config() може оновити їх у
+        # живому підпроцесі через env_method без перестворення процесів.
+        self.cfg = config or RewardConfig()
+        self.ray_angles_deg = self.cfg.full_ray_angles()
 
         self._seg_p1, self._seg_p2 = _build_edge_segments(track.left_edge, track.right_edge)
         self._arc_length_table = _build_arc_length_table(track.center_line)
@@ -228,6 +228,7 @@ class CarRacingEnv(gym.Env):
         self.next_checkpoint_idx = 0
         self.episode_time = 0.0
         self.laps_completed = 0
+        self.episode_reward_total = 0.0  # сума reward епізоду — для score_death_threshold
         self._prev_arc_distance_to_checkpoint = 0.0
         self._last_rays = np.zeros(RAY_COUNT)
 
@@ -243,6 +244,14 @@ class CarRacingEnv(gym.Env):
 
     def set_segment_penalties(self, penalties: dict[int, float]) -> None:
         self._segment_penalties = penalties
+
+    def set_reward_config(self, config: RewardConfig) -> None:
+        """Оновлює налаштування нагород і кути променів у ЖИВОМУ середовищі —
+        викликається через env_method() з батьківського процесу, коли
+        користувач тисне "Застосувати" у вкладці налаштувань. Кількість
+        променів незмінна, тому розмір observation не ламається."""
+        self.cfg = config
+        self.ray_angles_deg = config.full_ray_angles()
 
     def set_reference_time(self, reference_time: float | None) -> None:
         """Оновлює референсний час для фінального бонусу кола — викликається
@@ -275,6 +284,7 @@ class CarRacingEnv(gym.Env):
             self.next_checkpoint_idx = 1 % len(track.checkpoints)
             self.episode_time = 0.0
             self.laps_completed = 0
+            self.episode_reward_total = 0.0
             car_arc = _track_progress(self.car.position, track.center_line, self._arc_length_table)
             checkpoint_arc = self._checkpoint_arc_lengths[self.next_checkpoint_idx]
             self._prev_arc_distance_to_checkpoint = _forward_arc_distance(car_arc, checkpoint_arc, self._track_length)
@@ -290,7 +300,19 @@ class CarRacingEnv(gym.Env):
 
     def _get_obs(self) -> np.ndarray:
         assert self.car is not None
-        rays = cast_rays_vectorized(self.car.position, self.car.heading, self._seg_p1, self._seg_p2)
+        rays = cast_rays_vectorized(self.car.position, self.car.heading, self._seg_p1, self._seg_p2,
+                                     ray_angles_deg=self.ray_angles_deg)
+
+        # Машина ЗА межами траси (актуально в несмертельному режимі вильоту):
+        # промені, що дивляться від траси в пустоту, ні в що не влучають і
+        # показували б "200 = вільно" — бот думав би, що там простір, і
+        # спокійно кружляв за трасою (виявив користувач). Тому зовні всі
+        # промені примусово 0 — "стіни впритул з усіх боків", максимальний
+        # сигнал небезпеки, який штовхає політику назад на асфальт.
+        center_dist = float(np.min(np.linalg.norm(self.track.center_line - self.car.position, axis=1)))
+        if center_dist > self.half_track_width:
+            rays = np.zeros_like(rays)
+
         self._last_rays = rays  # кешується для info["render_state"] у step() — не рахувати вдруге
         target = self.track.checkpoints[self.next_checkpoint_idx]
         to_target = target - self.car.position
@@ -318,6 +340,7 @@ class CarRacingEnv(gym.Env):
         self.next_checkpoint_idx = 1 % len(self.track.checkpoints)
         self.episode_time = 0.0
         self.laps_completed = 0
+        self.episode_reward_total = 0.0
 
         car_arc = _track_progress(self.car.position, self.track.center_line, self._arc_length_table)
         checkpoint_arc = self._checkpoint_arc_lengths[self.next_checkpoint_idx]
@@ -367,7 +390,7 @@ class CarRacingEnv(gym.Env):
             # сегмент інакше ніколи не отримав би "успіх").
             passed_segment = self.next_checkpoint_idx
             self.next_checkpoint_idx = (self.next_checkpoint_idx + 1) % n
-            reward += CHECKPOINT_BONUS * self.checkpoint_weight
+            reward += self.cfg.checkpoint_bonus
             new_checkpoint_arc = self._checkpoint_arc_lengths[self.next_checkpoint_idx]
             self._prev_arc_distance_to_checkpoint = _forward_arc_distance(car_arc, new_checkpoint_arc, self._track_length)
 
@@ -379,7 +402,7 @@ class CarRacingEnv(gym.Env):
                 # спочатку". Епізод все одно закінчиться природно — або через
                 # виліт (track limits нижче), або через ліміт кіл/часу.
                 if self.reference_time is not None and self.episode_time > 0:
-                    reward += min(1.0, self.reference_time / self.episode_time) * 10.0 * self.checkpoint_weight
+                    reward += min(1.0, self.reference_time / self.episode_time) * self.cfg.lap_bonus_scale
                 just_completed_lap_time = self.episode_time
                 self.laps_completed += 1
                 self.episode_time = 0.0  # нове коло рахує свій власний час окремо від попередніх
@@ -404,10 +427,17 @@ class CarRacingEnv(gym.Env):
                 cos_angle = np.clip(np.dot(in_vec, out_vec) / (in_norm * out_norm), -1.0, 1.0)
                 turn_angle_deg = np.degrees(np.arccos(cos_angle))
                 if turn_angle_deg >= SHARP_TURN_ANGLE_DEG:
-                    reward += SHARP_TURN_BRAKE_SCALE * self.car.speed * self.checkpoint_weight
+                    reward += self.cfg.brake_bonus_scale * self.car.speed * self.physics_substeps
 
         # 3. Швидкість — невеликий бонус, щоб не тягнути час.
-        reward += self.car.speed * SPEED_REWARD_SCALE * self.speed_weight
+        #
+        # Покрокові компоненти (гальмо, швидкість, застрягання нижче)
+        # множаться на physics_substeps: нараховуються вони раз на крок
+        # VecEnv, а крок покриває substeps кадрів фізики — без множника
+        # dense reward по дузі (який росте з проїханою відстанню, тобто з
+        # substeps автоматично) переважив би їх учетверо проти початкового
+        # балансу, і бот знову перестав би гальмувати перед поворотами.
+        reward += self.car.speed * self.cfg.speed_reward_scale * self.physics_substeps
 
         # 3b. Штраф за тривалу їзду значно повільніше за власний недавній
         # максимум (ковзне вікно SPEED_WINDOW_SECONDS) — ловить "застрягання",
@@ -418,9 +448,9 @@ class CarRacingEnv(gym.Env):
             self._speed_history.popleft()
         recent_max_speed = max(s for _, s in self._speed_history)
         if recent_max_speed > 1e-6 and self.car.speed < recent_max_speed * SPEED_LOW_FRACTION:
-            self._low_speed_timer += self.dt
+            self._low_speed_timer += self.dt * self.physics_substeps
             if self._low_speed_timer > SPEED_LOW_GRACE_SECONDS:
-                reward += SPEED_LOW_PENALTY * self.speed_weight
+                reward += self.cfg.stuck_penalty * self.physics_substeps
         else:
             self._low_speed_timer = 0.0
 
@@ -439,17 +469,47 @@ class CarRacingEnv(gym.Env):
         segment_result: str | None = None
         result_segment: int | None = None
         if out_count > 0:
-            reward += OUT_OF_BOUNDS_PENALTY * self.out_of_bounds_weight
-            reward += self._segment_penalties.get(died_segment, 0.0)
-            terminated = True
-            segment_result = "died"
-            result_segment = died_segment
+            if self.cfg.out_of_bounds_is_death:
+                # Класика: разовий штраф + смерть епізоду.
+                reward += self.cfg.out_of_bounds_penalty
+                reward += self._segment_penalties.get(died_segment, 0.0)
+                terminated = True
+                segment_result = "died"
+                result_segment = died_segment
+            elif out_count >= 4:
+                # Несмертельний режим прощає лише ЧАСТКОВЕ порушення (колесо
+                # зрізало бордюр). Повністю за трасою (всі 4 кути) — смерть
+                # у будь-якому режимі: інакше бот міг би нескінченно блукати
+                # пустотою за трасою (виявив користувач — "просто кружляє").
+                reward += self.cfg.out_of_bounds_penalty
+                reward += self._segment_penalties.get(died_segment, 0.0)
+                terminated = True
+                segment_result = "died"
+                result_segment = died_segment
+            else:
+                # Експериментальний режим (вкладка налаштувань): виліт НЕ
+                # вбиває — штраф нараховується ЩОКРОКУ, поки хоч одне колесо
+                # за межею. Саме щокроку, а не разово: разовий штраф бот
+                # швидко "окупив" би зрізанням через траву (dense reward по
+                # дузі продовжує накопичуватись і поза асфальтом), і виліт
+                # став би вигідною стратегією замість покараної.
+                reward += self.cfg.out_of_bounds_penalty * self.physics_substeps
         elif passed_segment is not None:
             # Саме ЦЕЙ сегмент щойно пройдено без вильоту (незалежно від
             # решти кола) — власна "проблемна позначка" на цьому повороті
             # може зникнути, навіть якщо десь далі на трасі бот ще вилітає.
             segment_result = "passed"
             result_segment = passed_segment
+
+        # Смерть за рахунком: сумарний reward епізоду впав нижче порога
+        # (за замовчуванням -1000) — бот явно "здався" (кружляє, стоїть,
+        # збирає штрафи), немає сенсу тягнути епізод далі. Поріг редагується
+        # у вкладці налаштувань. НЕ рахується як смерть сегмента — це
+        # зазвичай не вина конкретного повороту, і статистику "проблемних
+        # полів" такі смерті лише забруднювали б.
+        self.episode_reward_total += reward
+        if self.episode_reward_total < self.cfg.score_death_threshold:
+            terminated = True
 
         truncated = self.episode_time >= MAX_EPISODE_SECONDS
 

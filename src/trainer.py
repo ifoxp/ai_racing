@@ -23,19 +23,23 @@ SubprocVecEnv створюється ОДИН РАЗ, лінькво, всере
 
 from __future__ import annotations
 
+import os
 import random
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
+import theme
 from rl_env import RAY_ANGLES_DEG, CarRacingEnv
 from segment_tracker import SegmentDifficultyTracker
+from settings import RewardConfig
 from track_generator import Track
 
 SEGMENT_PENALTY_BROADCAST_INTERVAL = 128  # кроків callback між розсилками env_method (дорога операція)
@@ -74,15 +78,6 @@ def _generate_bot_names(count: int) -> list[str]:
 
 
 @dataclass
-class RewardWeights:
-    """Ваги reward-функції, які можна крутити в UI перед стартом навчання —
-    значення тут лише МНОЖАТЬ базові компоненти з rl_env.py (1.0 = як є)."""
-    checkpoint: float = 1.0
-    speed: float = 1.0
-    out_of_bounds_penalty: float = 1.0
-
-
-@dataclass
 class RenderSnapshot:
     """Стан одного бота на момент останнього кроку — усе, що потрібно Arcade,
     щоб намалювати кадр, рядок у панелі балів, і індикатор натиснутих кнопок
@@ -100,6 +95,7 @@ class RenderSnapshot:
     current_lap_time: float = 0.0
     lap_number: int = 1
     best_lap_time: float | None = None  # найкращий ВЛАСНИЙ час цього бота (не спільний trainer.best_lap_time)
+    color: tuple[int, int, int] = theme.CYAN  # колір машини на трасі (з CAR_PALETTE)
 
 
 # Кадрів фізики за ОДИН крок VecEnv (= один обмін IPC з підпроцесами + одне
@@ -114,14 +110,11 @@ PHYSICS_SUBSTEPS = 4
 
 
 def _make_env_fn(track: Track, half_track_width: float, reference_time: float | None,
-                  reward_weights: RewardWeights):
+                  config: RewardConfig):
     def _init():
         return CarRacingEnv(
             track, half_track_width=half_track_width, reference_time=reference_time,
-            physics_substeps=PHYSICS_SUBSTEPS,
-            checkpoint_weight=reward_weights.checkpoint,
-            speed_weight=reward_weights.speed,
-            out_of_bounds_weight=reward_weights.out_of_bounds_penalty,
+            physics_substeps=PHYSICS_SUBSTEPS, config=config,
         )
     return _init
 
@@ -139,17 +132,24 @@ class BackgroundTrainer:
 
     def __init__(self, track: Track, half_track_width: float = 22.0,
                  reference_time: float | None = None, bot_count: int = DEFAULT_BOT_COUNT,
-                 reward_weights: RewardWeights | None = None):
+                 config: RewardConfig | None = None):
         self.track = track
         self.half_track_width = half_track_width
         self.reference_time = reference_time
         self.bot_count = bot_count
-        self.reward_weights = reward_weights or RewardWeights()
+        self.config = config or RewardConfig()
         self.bot_names = _generate_bot_names(bot_count)
         self.dt = 1.0 / 60.0
 
         self.vec_env: SubprocVecEnv | None = None
         self.model: PPO | None = None
+
+        # Кожен бот отримує випадковий колір з палітри (без повторів, поки
+        # ботів не більше, ніж кольорів) — за проханням користувача, щоб
+        # усі машини не були однаково синіми.
+        shuffled_colors = theme.CAR_PALETTE.copy()
+        random.shuffle(shuffled_colors)
+        self.bot_colors = [shuffled_colors[i % len(shuffled_colors)] for i in range(bot_count)]
 
         self.speed_multiplier = 1
         self._lock = threading.Lock()
@@ -158,6 +158,7 @@ class BackgroundTrainer:
                 bot_id=i, name=self.bot_names[i],
                 position=track.start_pos.copy(), heading=0.0,
                 ray_distances=np.zeros(len(RAY_ANGLES_DEG)),
+                color=self.bot_colors[i],
             )
             for i in range(bot_count)
         ]
@@ -178,6 +179,10 @@ class BackgroundTrainer:
         # env.step(), з того самого потоку, що й усе інше спілкування з VecEnv.
         self._pending_track_update: tuple[Track, float | None] | None = None
         self._track_update_lock = threading.Lock()
+        # Той самий queued-патерн для налаштувань нагород ("Застосувати" у
+        # вкладці налаштувань під час активного навчання) — env_method лише
+        # з потоку навчання, з тієї ж причини (pickle data was truncated).
+        self._pending_config_update: RewardConfig | None = None
 
         # Спільна для всіх ботів статистика "які сегменти траси стабільно
         # вбивають" — оновлюється в _SnapshotCallback з info кожного бота,
@@ -239,6 +244,7 @@ class BackgroundTrainer:
                     bot_id=i, name=self.bot_names[i],
                     position=track.start_pos.copy(), heading=0.0,
                     ray_distances=np.zeros(len(RAY_ANGLES_DEG)),
+                    color=self.bot_colors[i],
                 )
                 for i in range(self.bot_count)
             ]
@@ -251,6 +257,18 @@ class BackgroundTrainer:
                 # немає конкуруючого потоку, env_method безпечний одразу.
                 self.vec_env.env_method("set_track", track, reference_time)
                 self.vec_env.env_method("set_segment_penalties", {})
+
+    def update_reward_config(self, config: RewardConfig) -> None:
+        """"Застосувати" з вкладки налаштувань (ГОЛОВНИЙ потік). Нові
+        значення долітають у живі підпроцеси тим самим безпечним шляхом,
+        що й нова траса — через чергу до потоку навчання."""
+        self.config = config
+        if self.vec_env is not None:
+            if self._running:
+                with self._track_update_lock:
+                    self._pending_config_update = config
+            else:
+                self.vec_env.env_method("set_reward_config", config)
 
     @property
     def total_timesteps(self) -> int:
@@ -325,12 +343,19 @@ class BackgroundTrainer:
         self._pending_load_path = path
 
     def _train_loop(self) -> None:
+        # torch за замовчуванням розпаралелює gradient update на ВСІ ядра
+        # CPU — на час апдейту (кожні n_steps кроків) потоку рендера Arcade
+        # не лишалось процесорного часу, і кадр провисав (мікрофризи,
+        # однакові на будь-якому speed_multiplier — помітив користувач).
+        # Лишаємо рендеру два ядра.
+        torch.set_num_threads(max(2, (os.cpu_count() or 8) - 2))
+
         # SubprocVecEnv/PPO піднімаються ТУТ, у фоновому потоці — спавн N
         # OS-процесів займає кілька секунд на Windows, і робити це в
         # головному потоці заморожувало б Arcade-вікно.
         if self.vec_env is None:
             env_fns = [
-                _make_env_fn(self.track, self.half_track_width, self.reference_time, self.reward_weights)
+                _make_env_fn(self.track, self.half_track_width, self.reference_time, self.config)
                 for _ in range(self.bot_count)
             ]
             # Кожен бот — окремий OS-процес (Windows завжди spawn, не fork),
@@ -389,14 +414,20 @@ class _SnapshotCallback(BaseCallback):
         # SubprocVecEnv.step_wait() у collect_rollouts() (саме це раніше
         # валило pickle: "pickle data was truncated").
         pending = None
+        pending_config = None
         with trainer._track_update_lock:
             if trainer._pending_track_update is not None:
                 pending = trainer._pending_track_update
                 trainer._pending_track_update = None
+            if trainer._pending_config_update is not None:
+                pending_config = trainer._pending_config_update
+                trainer._pending_config_update = None
         if pending is not None:
             new_track, new_reference_time = pending
             trainer.vec_env.env_method("set_track", new_track, new_reference_time)
             trainer.vec_env.env_method("set_segment_penalties", {})
+        if pending_config is not None:
+            trainer.vec_env.env_method("set_reward_config", pending_config)
 
         infos = self.locals.get("infos")
         rewards = self.locals.get("rewards")
@@ -456,6 +487,7 @@ class _SnapshotCallback(BaseCallback):
                     position=render_state["position"],
                     heading=render_state["heading"],
                     ray_distances=render_state["rays"],
+                    color=trainer.bot_colors[i],
                     episode_reward=trainer._episode_reward_acc[i],
                     throttle=render_state["throttle"],
                     steer=render_state["steer"],
