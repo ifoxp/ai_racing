@@ -14,7 +14,7 @@ import arcade
 import numpy as np
 
 import theme
-from bot_panel import VISIBLE_COUNT_OPTIONS, BotPanel, ControlsIndicator
+from bot_panel import BotPanel, ControlsIndicator
 from car import CAR_LENGTH, CAR_WIDTH, CarState, step_car
 from lap_tracker import GhostPlayer, LapTracker
 from leaderboard import Leaderboard
@@ -428,7 +428,7 @@ class CarAIWindow(arcade.Window):
         if not snapshots:
             return
 
-        visible_count = VISIBLE_COUNT_OPTIONS[self.bot_panel.visible_count_idx]
+        visible_count = self.bot_panel.visible_count
         ranked = sorted(snapshots, key=lambda s: s.episode_reward, reverse=True)[:visible_count]
 
         show_rays = self.panel.show_rays_checkbox.checked

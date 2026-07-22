@@ -102,11 +102,23 @@ class RenderSnapshot:
     best_lap_time: float | None = None  # найкращий ВЛАСНИЙ час цього бота (не спільний trainer.best_lap_time)
 
 
+# Кадрів фізики за ОДИН крок VecEnv (= один обмін IPC з підпроцесами + одне
+# рішення політики). Вузьке місце швидкості симуляції — не сама фізика
+# (дешевий numpy), а обмін даними з 16-24 OS-процесами (~1.5-2 мс на крок
+# незалежно від speed_multiplier), тому стеля була ~10x, скільки б користувач
+# не виставляв. 4 кадри за один обмін піднімають стелю ~в 4 рази. Ціна: бот
+# приймає рішення 15 разів/с замість 60 (тримає ту саму дію 4 кадри) — для
+# їзди прийнятно, зате checkpoint-и (радіус 30 од.) все ще не проскакуються:
+# навіть на MAX_SPEED=220 од/с за 4/60 с машина проходить ~15 одиниць.
+PHYSICS_SUBSTEPS = 4
+
+
 def _make_env_fn(track: Track, half_track_width: float, reference_time: float | None,
                   reward_weights: RewardWeights):
     def _init():
         return CarRacingEnv(
             track, half_track_width=half_track_width, reference_time=reference_time,
+            physics_substeps=PHYSICS_SUBSTEPS,
             checkpoint_weight=reward_weights.checkpoint,
             speed_weight=reward_weights.speed,
             out_of_bounds_weight=reward_weights.out_of_bounds_penalty,
@@ -117,9 +129,9 @@ def _make_env_fn(track: Track, half_track_width: float, reference_time: float | 
 class BackgroundTrainer:
     """Обгортає PPO + SubprocVecEnv(bot_count копій), навчається у фоновому
     потоці шматками (rollout buffer, n_steps timesteps за раз), не блокуючи
-    рендер. speed_multiplier (1x-10x) керує паузою між кроками VecEnv —
-    на 1x весь гурт ботів рухається в темпі реального часу, на 10x без
-    штучного гальмування.
+    рендер. speed_multiplier керує паузою між кроками VecEnv — на 1x весь
+    гурт ботів рухається в темпі реального часу, на високих значеннях пауза
+    зникає і швидкість впирається у вартість самого кроку (IPC + фізика).
 
     VecEnv/PPO створюються ЛІНЬКВО всередині start() (у фоновому потоці) —
     не в __init__ — щоб конструювання BackgroundTrainer (яке відбувається
@@ -473,8 +485,10 @@ class _SnapshotCallback(BaseCallback):
 
         trainer._maybe_autosave()
 
+        # Один крок VecEnv симулює PHYSICS_SUBSTEPS кадрів часу, тому пауза
+        # для темпу реального часу (1x) — dt * substeps, не просто dt.
         speed = max(1, trainer.speed_multiplier)
-        pause = trainer.dt / speed
+        pause = trainer.dt * PHYSICS_SUBSTEPS / speed
         if pause > 0.0005:
             time.sleep(pause)
 

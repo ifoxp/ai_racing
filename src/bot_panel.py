@@ -12,9 +12,18 @@ import arcade
 
 import theme
 
-VISIBLE_COUNT_OPTIONS = [1, 5, 10, 25, 50, 100]
 ROW_HEIGHT = 38  # основний рядок (ім'я+бали) + компактний рядок часів кола під ним
 MAX_LIST_HEIGHT = 260  # видима висота списку (скрол понад це) у пікселях
+
+
+def _visible_count_options(bot_count: int) -> list[int]:
+    """Варіанти "скільки ботів показувати" залежать від того, скільки їх
+    реально запущено — фіксований список (1/5/10/25/50/100) для 8 ботів
+    пропонував безглузді 25/50/100. Тепер: 1, чверть, половина, всі
+    (для 8 → 1/2/4/8, для 16 → 1/4/8/16, для 24 → 1/6/12/24)."""
+    if bot_count <= 1:
+        return [1]
+    return sorted({1, max(1, round(bot_count / 4)), max(1, round(bot_count / 2)), bot_count})
 
 
 def _format_lap_time(seconds: float | None) -> str:
@@ -31,7 +40,8 @@ class BotPanel:
         self.y = y
         self.width = 220
         self.collapsed = False
-        self.visible_count_idx = 1  # за замовчуванням 5 — досить, щоб не захаращувати екран
+        self.options = [1]  # перераховуються в draw() від реальної кількості ботів
+        self.visible_count_idx = 0
         self.scroll_offset = 0.0
         self.selected_bot_id: int | None = None
 
@@ -110,7 +120,19 @@ class BotPanel:
         self._collapse_hint_text.text = "▸" if self.collapsed else "▾"
         self._collapse_hint_text.draw()
 
-        visible_count = VISIBLE_COUNT_OPTIONS[self.visible_count_idx]
+        # Варіанти залежать від реальної кількості ботів — при зміні списку
+        # (нове навчання з іншим bot_count) зберігаємо не індекс, а найближче
+        # ЗНАЧЕННЯ до поточного вибору (щоб "показувати 8" не стало раптом
+        # "показувати 1" лише тому, що список перебудувався).
+        new_options = _visible_count_options(len(bots)) if bots else [1]
+        if new_options != self.options:
+            current_value = self.options[min(self.visible_count_idx, len(self.options) - 1)]
+            self.options = new_options
+            self.visible_count_idx = min(
+                range(len(new_options)), key=lambda i: abs(new_options[i] - current_value)
+            )
+
+        visible_count = self.options[self.visible_count_idx]
         self._count_label_text.text = str(visible_count)
         self._count_label_text.draw()
 
@@ -187,7 +209,7 @@ class BotPanel:
     def on_mouse_press(self, x: float, y: float) -> None:
         dd_left, dd_right, dd_bottom, dd_top = self._dropdown_bounds()
         if dd_left <= x <= dd_right and dd_bottom <= y <= dd_top:
-            self.visible_count_idx = (self.visible_count_idx + 1) % len(VISIBLE_COUNT_OPTIONS)
+            self.visible_count_idx = (self.visible_count_idx + 1) % len(self.options)
             return
 
         header_left, header_right, header_bottom, header_top = self._header_bounds()
@@ -199,6 +221,10 @@ class BotPanel:
             if left <= x <= right and bottom <= y <= top:
                 self.selected_bot_id = None if self.selected_bot_id == bot_id else bot_id
                 return
+
+    @property
+    def visible_count(self) -> int:
+        return self.options[min(self.visible_count_idx, len(self.options) - 1)]
 
     def on_mouse_scroll(self, x: float, y: float, scroll_y: int) -> None:
         if self.collapsed:
