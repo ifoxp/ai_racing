@@ -468,6 +468,12 @@ class SidePanel:
         # можна вмикати/вимикати будь-коли, щоб візуально перевірити raycast.
         self.show_rays_checkbox = Checkbox(0, 0, 18, "показувати промені бота", checked=False)
 
+        # Гоночний режим навчання: 8 машин в одному світі, колізії, місця й
+        # очки за фініш (race_training.py). Блокується разом з bot_count,
+        # поки VecEnv живий — перемикання вимагає перестворення тренера.
+        self.race_checkbox = Checkbox(0, 0, 18, "гонка: 8 ботів + колізії", checked=False)
+        self._race_locked = False
+
         # --- Налаштування навчання (перед стартом) ---
         self._bot_count_label = arcade.Text(
             "ботів (паралельно)", 0, 0, theme.TEXT_SECONDARY, font_size=10.5,
@@ -567,7 +573,9 @@ class SidePanel:
         self._bot_count_label.x = content_x
         self._bot_count_label.y = y
         self.bot_count_stepper.move(content_x, y - 20)
-        y -= 60
+        y -= 52
+        self.race_checkbox.move(content_x - content_width / 2 + 9, y)
+        y -= 36
 
         # --- Секція: НАВЧАННЯ (Етап 4) ---
         next_section("НАВЧАННЯ")
@@ -666,6 +674,8 @@ class SidePanel:
         self._bot_count_label.color = theme.TEXT_SECONDARY if not training_locked else theme.TEXT_FAINT
         self._bot_count_label.draw()
         self.bot_count_stepper.draw()
+        self._race_locked = training_locked  # перевіряється в on_mouse_press
+        self.race_checkbox.draw()
 
         self._speed_label.text = f"швидкість тренування: {self.speed_multiplier}x"
         self._speed_label.draw()
@@ -701,6 +711,7 @@ class SidePanel:
         self.paste_icon.hovered = self.paste_icon.contains(x, y)
         self.copy_icon.hovered = self.copy_icon.contains(x, y)
         self.show_rays_checkbox.hovered = self.show_rays_checkbox.contains(x, y)
+        self.race_checkbox.hovered = not getattr(self, "_race_locked", False) and self.race_checkbox.contains(x, y)
         self.bot_count_stepper.on_mouse_motion(x, y)
 
     def on_mouse_press(self, x: float, y: float) -> str | None:
@@ -719,6 +730,10 @@ class SidePanel:
             return None
         if self.show_rays_checkbox.contains(x, y):
             self.show_rays_checkbox.checked = not self.show_rays_checkbox.checked
+            return None
+        if self.race_checkbox.contains(x, y):
+            if not getattr(self, "_race_locked", False):
+                self.race_checkbox.checked = not self.race_checkbox.checked
             return None
         if self.bot_count_stepper.on_mouse_press(x, y):
             return None

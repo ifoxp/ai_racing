@@ -223,6 +223,7 @@ class CarAIWindow(arcade.Window):
             self.track, reference_time=self.lap_tracker.best_time if self.lap_tracker else None,
             bot_count=self.panel.bot_count_stepper.value,
             config=self.reward_config,
+            race_training=self.panel.race_checkbox.checked,
         )
         self.trainer.request_load(str(path))
         self.trainer.start()
@@ -279,6 +280,7 @@ class CarAIWindow(arcade.Window):
                 track, reference_time=reference_time,
                 bot_count=self.panel.bot_count_stepper.value,
                 config=self.reward_config,
+                race_training=self.panel.race_checkbox.checked,
             )
             self.panel.buttons["train_start"].label = "Почати навчання"
             self.panel.buttons["train_start"]._text.text = "Почати навчання"
@@ -854,6 +856,7 @@ class CarAIWindow(arcade.Window):
                         self.track, reference_time=self.trainer.reference_time,
                         bot_count=self.panel.bot_count_stepper.value,
                         config=self.reward_config,
+                        race_training=self.panel.race_checkbox.checked,
                     )
                     self.trainer.start()
                     # Піднімання N паралельних процесів на Windows займає до

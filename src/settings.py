@@ -41,6 +41,7 @@ class RewardConfig:
     out_of_bounds_penalty: float = -10.0  # при вильоті (разово якщо смерть, щокроку якщо ні)
     out_of_bounds_is_death: bool = True  # False = штраф щокроку за межею, але епізод живе
     score_death_threshold: float = -1000.0  # сумарний reward епізоду нижче цього = смерть
+    race_points_scale: float = 1.0  # множник очок за місця в гоночному режимі (профіль 10/7/5/3/1.5/1/0/0)
     ray_half_angles: list[float] = field(default_factory=lambda: list(DEFAULT_RAY_HALF_ANGLES))
 
     def full_ray_angles(self) -> np.ndarray:

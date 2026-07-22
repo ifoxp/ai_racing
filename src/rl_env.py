@@ -232,6 +232,15 @@ class CarRacingEnv(gym.Env):
         self._prev_arc_distance_to_checkpoint = 0.0
         self._last_rays = np.zeros(RAY_COUNT)
 
+        # Додаткові відрізки-перешкоди для променів (корпуси СУПЕРНИКІВ у
+        # гоночному режимі) — виставляються спільним світом перед кожним
+        # кроком. Промені бачать їх ТАК САМО, як стіни траси (без окремого
+        # каналу "це машина") — свідомо: розмір observation не змінюється,
+        # вже навчена модель працює без перенавчання і переносить свій
+        # інстинкт "не врізайся в стіну" на суперників.
+        self._extra_seg_p1: np.ndarray | None = None
+        self._extra_seg_p2: np.ndarray | None = None
+
         # --- Стан для нових компонентів reward (стиль водіння) ---
         self._speed_history: deque[tuple[float, float]] = deque()  # (episode_time, speed)
         self._low_speed_timer = 0.0
@@ -244,6 +253,20 @@ class CarRacingEnv(gym.Env):
 
     def set_segment_penalties(self, penalties: dict[int, float]) -> None:
         self._segment_penalties = penalties
+
+    def set_extra_ray_segments(self, p1: np.ndarray | None, p2: np.ndarray | None) -> None:
+        """Оновлює перешкоди-суперники для променів (гоночний режим)."""
+        self._extra_seg_p1 = p1
+        self._extra_seg_p2 = p2
+
+    def place_car(self, position: np.ndarray, heading: float) -> None:
+        """Ставить машину в довільну точку (стартова сітка гонки) і коректно
+        перераховує внутрішній прогрес — інакше перший dense reward рахувався
+        б від старої позиції і дав величезний хибний стрибок."""
+        self.car = CarState(position=position.copy(), heading=heading)
+        car_arc = _track_progress(self.car.position, self.track.center_line, self._arc_length_table)
+        checkpoint_arc = self._checkpoint_arc_lengths[self.next_checkpoint_idx]
+        self._prev_arc_distance_to_checkpoint = _forward_arc_distance(car_arc, checkpoint_arc, self._track_length)
 
     def set_reward_config(self, config: RewardConfig) -> None:
         """Оновлює налаштування нагород і кути променів у ЖИВОМУ середовищі —
@@ -300,7 +323,11 @@ class CarRacingEnv(gym.Env):
 
     def _get_obs(self) -> np.ndarray:
         assert self.car is not None
-        rays = cast_rays_vectorized(self.car.position, self.car.heading, self._seg_p1, self._seg_p2,
+        seg_p1, seg_p2 = self._seg_p1, self._seg_p2
+        if self._extra_seg_p1 is not None and len(self._extra_seg_p1) > 0:
+            seg_p1 = np.concatenate([seg_p1, self._extra_seg_p1], axis=0)
+            seg_p2 = np.concatenate([seg_p2, self._extra_seg_p2], axis=0)
+        rays = cast_rays_vectorized(self.car.position, self.car.heading, seg_p1, seg_p2,
                                      ray_angles_deg=self.ray_angles_deg)
 
         # Машина ЗА межами траси (актуально в несмертельному режимі вильоту):
@@ -355,10 +382,25 @@ class CarRacingEnv(gym.Env):
         assert self.car is not None
         throttle, steer, brake = self._decode_action(action)
 
-        reward = 0.0
         for _ in range(self.physics_substeps):
             self.car = step_car(self.car, throttle=throttle, steer=steer, brake=brake, dt=self.dt)
             self.episode_time += self.dt
+
+        return self._finish_step(throttle, steer, brake)
+
+    def external_step(self, car_state: CarState, action: np.ndarray):
+        """Крок, коли фізику вже порахував СПІЛЬНИЙ СВІТ (гоночний режим з
+        колізіями — race_training.py): машини взаємодіють між собою, тому
+        їхню фізику не можна рахувати незалежно всередині кожного env. Сюди
+        приходить готовий стан після колізій, а тут — все інше (нагороди,
+        checkpoint-и, track limits, obs), той самий код, що й у step()."""
+        throttle, steer, brake = self._decode_action(action)
+        self.car = car_state
+        self.episode_time += self.dt * self.physics_substeps
+        return self._finish_step(throttle, steer, brake)
+
+    def _finish_step(self, throttle: int, steer: float, brake: float):
+        reward = 0.0
 
         # 1. Dense reward: наближення до наступного checkpoint УЗДОВЖ ДОРОГИ
         # (arc length по center_line), НЕ по прямій лінії. Пряма відстань
@@ -394,13 +436,16 @@ class CarRacingEnv(gym.Env):
             new_checkpoint_arc = self._checkpoint_arc_lengths[self.next_checkpoint_idx]
             self._prev_arc_distance_to_checkpoint = _forward_arc_distance(car_arc, new_checkpoint_arc, self._track_length)
 
-            if self.next_checkpoint_idx == 0:
-                # Повне коло пройдено — бот НЕ втрачає накопичений reward і
-                # їде далі одразу на наступне коло (замість reset), доки не
-                # набереться MAX_LAPS_PER_EPISODE поспіль. Це підтримує стимул
-                # "берегти й нарощувати очки", а не "закінчити і почати
-                # спочатку". Епізод все одно закінчиться природно — або через
-                # виліт (track limits нижче), або через ліміт кіл/часу.
+            if passed_segment == 0:
+                # Повне коло = перетин СТАРТОВОЇ ЛІНІЇ (checkpoint 0), а не
+                # останнього checkpoint перед нею — раніше умова стояла на
+                # "next став 0" (тобто щойно пройдено ОСТАННІЙ checkpoint), і
+                # фініш зараховувався на один сегмент раніше реальної лінії
+                # (помітив користувач у гоночному режимі). Бот НЕ втрачає
+                # накопичений reward і їде далі одразу на наступне коло
+                # (замість reset), доки не набереться MAX_LAPS_PER_EPISODE
+                # поспіль. Епізод закінчиться природно — виліт, ліміт кіл
+                # або таймаут.
                 if self.reference_time is not None and self.episode_time > 0:
                     reward += min(1.0, self.reference_time / self.episode_time) * self.cfg.lap_bonus_scale
                 just_completed_lap_time = self.episode_time

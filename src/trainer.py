@@ -132,10 +132,16 @@ class BackgroundTrainer:
 
     def __init__(self, track: Track, half_track_width: float = 22.0,
                  reference_time: float | None = None, bot_count: int = DEFAULT_BOT_COUNT,
-                 config: RewardConfig | None = None):
+                 config: RewardConfig | None = None, race_training: bool = False):
         self.track = track
         self.half_track_width = half_track_width
         self.reference_time = reference_time
+        # Гоночний режим: 8 машин в одному спільному світі з колізіями
+        # (race_training.RaceVecEnv) замість N незалежних OS-процесів.
+        self.race_training = race_training
+        if race_training:
+            from race_training import NUM_RACE_CARS
+            bot_count = NUM_RACE_CARS
         self.bot_count = bot_count
         self.config = config or RewardConfig()
         self.bot_names = _generate_bot_names(bot_count)
@@ -350,24 +356,34 @@ class BackgroundTrainer:
         # Лишаємо рендеру два ядра.
         torch.set_num_threads(max(2, (os.cpu_count() or 8) - 2))
 
-        # SubprocVecEnv/PPO піднімаються ТУТ, у фоновому потоці — спавн N
+        # VecEnv/PPO піднімаються ТУТ, у фоновому потоці — спавн N
         # OS-процесів займає кілька секунд на Windows, і робити це в
         # головному потоці заморожувало б Arcade-вікно.
         if self.vec_env is None:
-            env_fns = [
-                _make_env_fn(self.track, self.half_track_width, self.reference_time, self.config)
-                for _ in range(self.bot_count)
-            ]
-            # Кожен бот — окремий OS-процес (Windows завжди spawn, не fork),
-            # який заново імпортує весь torch/CUDA рантайм при старті. Це
-            # реальний ліміт пам'яті машини, не щось, що можна обійти
-            # прапорцем зсередини коду (CUDA_VISIBLE_DEVICES не встигає
-            # подіяти — torch вантажиться ще при імпорті main.py, до
-            # виконання будь-якого нашого коду в дочірньому процесі).
-            # Тому bot_count у UI свідомо обмежений зверху (Stepper max_value
-            # в ui_panel.py) — 50+ ботів валить процес з MemoryError на
-            # звичайній машині.
-            self.vec_env = SubprocVecEnv(env_fns)
+            if self.race_training:
+                # Гонка: один процес, спільний світ, колізії. IPC немає.
+                from race_training import RaceVecEnv
+                self.vec_env = RaceVecEnv(
+                    self.track, config=self.config, num_cars=self.bot_count,
+                    half_track_width=self.half_track_width,
+                    reference_time=self.reference_time,
+                    physics_substeps=PHYSICS_SUBSTEPS,
+                )
+            else:
+                env_fns = [
+                    _make_env_fn(self.track, self.half_track_width, self.reference_time, self.config)
+                    for _ in range(self.bot_count)
+                ]
+                # Кожен бот — окремий OS-процес (Windows завжди spawn, не fork),
+                # який заново імпортує весь torch/CUDA рантайм при старті. Це
+                # реальний ліміт пам'яті машини, не щось, що можна обійти
+                # прапорцем зсередини коду (CUDA_VISIBLE_DEVICES не встигає
+                # подіяти — torch вантажиться ще при імпорті main.py, до
+                # виконання будь-якого нашого коду в дочірньому процесі).
+                # Тому bot_count у UI свідомо обмежений зверху (Stepper max_value
+                # в ui_panel.py) — 50+ ботів валить процес з MemoryError на
+                # звичайній машині.
+                self.vec_env = SubprocVecEnv(env_fns)
             if self._pending_load_path is not None:
                 self.model = PPO.load(self._pending_load_path, env=self.vec_env, device="cpu")
                 self._pending_load_path = None
@@ -482,8 +498,14 @@ class _SnapshotCallback(BaseCallback):
                     if trainer.cycles_completed >= AUTO_NEW_TRACK_AFTER_CYCLES:
                         trainer._auto_new_track_requested = True
 
+                # У гоночному режимі перед ім'ям — живе місце в заїзді (P1..P8).
+                display_name = trainer.bot_names[i]
+                race_position = render_state.get("race_position")
+                if race_position is not None:
+                    display_name = f"P{race_position} {display_name}"
+
                 new_snapshots[i] = RenderSnapshot(
-                    bot_id=i, name=trainer.bot_names[i],
+                    bot_id=i, name=display_name,
                     position=render_state["position"],
                     heading=render_state["heading"],
                     ray_distances=render_state["rays"],

@@ -38,6 +38,7 @@ _NUMBER_FIELDS: list[tuple[str, str, float]] = [
     ("stuck_penalty", "Штраф застрягання (щокадру)", RewardConfig().stuck_penalty),
     ("out_of_bounds_penalty", "Штраф за виліт", RewardConfig().out_of_bounds_penalty),
     ("score_death_threshold", "Смерть при рахунку нижче", RewardConfig().score_death_threshold),
+    ("race_points_scale", "Очки за місця в гонці (множник)", RewardConfig().race_points_scale),
 ]
 
 
