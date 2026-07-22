@@ -18,10 +18,11 @@ from bot_panel import VISIBLE_COUNT_OPTIONS, BotPanel, ControlsIndicator
 from car import CAR_LENGTH, CAR_WIDTH, CarState, step_car
 from lap_tracker import GhostPlayer, LapTracker
 from leaderboard import Leaderboard
+from race_mode import MAX_LIST_HEIGHT, ModelPickerPanel, RaceSession, list_available_models
 from rl_env import RAY_ANGLES_DEG
 from track_generator import Track, generate_track
 from trainer import BackgroundTrainer, RewardWeights
-from ui_panel import SidePanel, seed_from_text
+from ui_panel import Button, SidePanel, TabBar, seed_from_text
 
 BOT_PANEL_GAP = 12
 
@@ -81,6 +82,23 @@ class CarAIWindow(arcade.Window):
         self.bot_panel = BotPanel(x=16, y=self.window_height - 48 - Leaderboard.HEIGHT - BOT_PANEL_GAP)
         self.controls_indicator = ControlsIndicator(x=16, y=48)
         self._load_selection_idx = 0  # який файл у logs/models/seed_<seed>/ обрано для наступного "Завантажити"
+
+        # --- Режим "Заїзди" (готові моделі, без навчання) ---
+        self.mode = "train"  # "train" | "races"
+        self.tab_bar = TabBar(
+            x=self.viewport_width / 2, y=self.window_height - 24, width=280, height=36,
+            tabs=[("train", "Навчання"), ("races", "Заїзди")],
+        )
+        model_picker_y = self.window_height - 88
+        self.model_picker = ModelPickerPanel(x=16, y=model_picker_y)
+        self.race_session: RaceSession | None = None
+        # Кнопка старту одразу під списком моделей — 30 (заголовок) +
+        # MAX_LIST_HEIGHT (список, якщо він повністю розгорнутий) + відступ.
+        race_button_y = model_picker_y - 30 - MAX_LIST_HEIGHT - 24
+        self.race_start_button = Button(
+            x=16 + self.model_picker.width / 2, y=race_button_y,
+            width=self.model_picker.width, height=34, label="Почати заїзд",
+        )
 
         self._fps_text = arcade.Text(
             "", self.viewport_width - 16, self.window_height - 16, theme.TEXT_FAINT,
@@ -225,6 +243,9 @@ class CarAIWindow(arcade.Window):
         self.bot_panel.scroll_offset = 0.0
         self.bot_panel.selected_bot_id = None
         self._load_selection_idx = 0
+
+        if self.race_session is not None:
+            self.race_session.set_track(track)
 
         # Уся геометрія рендеру рахується ОДИН РАЗ тут, а не щокадру в on_draw —
         # після Чайкіна+Catmull-Rom center_line має тисячі точок, і сотні окремих
@@ -444,6 +465,25 @@ class CarAIWindow(arcade.Window):
             arcade.draw_polygon_filled(screen_corners, fill_color + (255,))
             arcade.draw_polygon_outline(screen_corners, theme.BG, line_width=outline_width)
 
+    def _draw_race_cars(self) -> None:
+        """Аналог _draw_bots(), але для режиму "Заїзди" — кожна машина у
+        своєму випадковому кольорі (RaceCarSlot.color), без рангу/виділення
+        (тут немає reward, який визначав би "найкращого")."""
+        if self.race_session is None:
+            return
+        car_shape = np.array([[CAR_LENGTH / 2, CAR_WIDTH / 2], [CAR_LENGTH / 2, -CAR_WIDTH / 2],
+                               [-CAR_LENGTH / 2, -CAR_WIDTH / 2], [-CAR_LENGTH / 2, CAR_WIDTH / 2]])
+        for slot in self.race_session.slots:
+            car = slot.env.car
+            if car is None:
+                continue
+            c, s = np.cos(car.heading), np.sin(car.heading)
+            rot = np.array([[c, -s], [s, c]])
+            corners = car_shape @ rot.T + car.position
+            screen_corners = [self._world_to_screen_point(p) for p in corners]
+            arcade.draw_polygon_filled(screen_corners, slot.color + (255,))
+            arcade.draw_polygon_outline(screen_corners, theme.BG, line_width=1.2)
+
     def on_draw(self) -> None:
         self.clear()
 
@@ -454,46 +494,58 @@ class CarAIWindow(arcade.Window):
             self._asphalt_shapes.draw()
 
         self._draw_checkpoints()
-        self._draw_problematic_segments()
-        self._draw_ghost()
-        self._draw_bots()
 
-        if self.car is not None:
-            self._draw_car()
+        if self.mode == "train":
+            self._draw_problematic_segments()
+            self._draw_ghost()
+            self._draw_bots()
 
-        if self.lap_tracker is not None:
-            current_lap = self.lap_tracker.lap_time if self.lap_tracker.lap_running else None
-            bot_best_time = self.trainer.best_lap_time if self.trainer is not None else None
-            self.leaderboard.draw(
-                best_time=self.lap_tracker.best_time, current_lap_time=current_lap,
-                bot_best_time=bot_best_time,
+            if self.car is not None:
+                self._draw_car()
+
+            if self.lap_tracker is not None:
+                current_lap = self.lap_tracker.lap_time if self.lap_tracker.lap_running else None
+                bot_best_time = self.trainer.best_lap_time if self.trainer is not None else None
+                self.leaderboard.draw(
+                    best_time=self.lap_tracker.best_time, current_lap_time=current_lap,
+                    bot_best_time=bot_best_time,
+                )
+
+            snapshots = self.trainer.get_snapshots() if self.trainer is not None else []
+            bots_for_panel = [
+                (s.bot_id, s.name, s.episode_reward, s.best_lap_time, s.current_lap_time, s.lap_number)
+                for s in snapshots
+            ]
+            total_timesteps = self.trainer.total_timesteps if self.trainer is not None else 0
+            self.bot_panel.draw(bots_for_panel, total_timesteps=total_timesteps)
+
+            selected = next((s for s in snapshots if s.bot_id == self.bot_panel.selected_bot_id), None)
+            self.controls_indicator.draw(
+                name=selected.name if selected else None,
+                throttle=selected.throttle if selected else 0,
+                steer=selected.steer if selected else 0.0,
+                brake=selected.brake if selected else 0.0,
             )
 
-        snapshots = self.trainer.get_snapshots() if self.trainer is not None else []
-        bots_for_panel = [
-            (s.bot_id, s.name, s.episode_reward, s.best_lap_time, s.current_lap_time, s.lap_number)
-            for s in snapshots
-        ]
-        total_timesteps = self.trainer.total_timesteps if self.trainer is not None else 0
-        self.bot_panel.draw(bots_for_panel, total_timesteps=total_timesteps)
+            # Панель — bot_count/reward заблоковані не лише поки навчання
+            # активно працює, а й після зупинки, якщо VecEnv вже піднятий: клік
+            # "Почати навчання" тоді ПРОДОВЖУЄ той самий trainer (щоб не втрачати
+            # навчений прогрес), а не перестворює його з новими параметрами.
+            training_locked = self.trainer is not None and (self.trainer.is_running or self.trainer.vec_env is not None)
+            self.panel.draw(
+                seed=self.seed, track_ms=self.last_generation_ms, training_locked=training_locked,
+                load_selection_label=self._current_load_selection_label(),
+            )
+        else:  # "races"
+            self._draw_race_cars()
+            models = list_available_models(MODELS_DIR)
+            self.model_picker.draw(models)
+            self.race_start_button.label = "Зупинити заїзд" if self.race_session is not None else "Почати заїзд"
+            self.race_start_button._text.text = self.race_start_button.label
+            self.race_start_button.enabled = self.race_session is not None or bool(self.model_picker.selected)
+            self.race_start_button.draw()
 
-        selected = next((s for s in snapshots if s.bot_id == self.bot_panel.selected_bot_id), None)
-        self.controls_indicator.draw(
-            name=selected.name if selected else None,
-            throttle=selected.throttle if selected else 0,
-            steer=selected.steer if selected else 0.0,
-            brake=selected.brake if selected else 0.0,
-        )
-
-        # Панель — bot_count/reward заблоковані не лише поки навчання
-        # активно працює, а й після зупинки, якщо VecEnv вже піднятий: клік
-        # "Почати навчання" тоді ПРОДОВЖУЄ той самий trainer (щоб не втрачати
-        # навчений прогрес), а не перестворює його з новими параметрами.
-        training_locked = self.trainer is not None and (self.trainer.is_running or self.trainer.vec_env is not None)
-        self.panel.draw(
-            seed=self.seed, track_ms=self.last_generation_ms, training_locked=training_locked,
-            load_selection_label=self._current_load_selection_label(),
-        )
+        self.tab_bar.draw()
 
         # FPS у верхньому правому куті viewport
         if self.frame_times:
@@ -512,7 +564,7 @@ class CarAIWindow(arcade.Window):
         self._last_frame_stamp = now
         self.panel.on_update(delta_time)
 
-        if self.trainer is not None:
+        if self.mode == "train" and self.trainer is not None:
             self.trainer.speed_multiplier = self.panel.speed_multiplier
             if self.trainer.is_running and self.panel.buttons["train_start"].label != "Зупинити навчання":
                 self._set_train_button_label("Зупинити навчання")
@@ -525,6 +577,10 @@ class CarAIWindow(arcade.Window):
                 logger.info("Автоматична зміна траси: %d успішних циклів", self.trainer.cycles_completed)
                 self.trainer.acknowledge_auto_new_track()
                 self._generate_new_track(seed=random.randint(0, 1_000_000))
+
+        if self.mode == "races" and self.race_session is not None:
+            dt = min(delta_time, 1 / 20)
+            self.race_session.step(dt)
 
         if self.car is not None:
             throttle = 1 if arcade.key.W in self._keys_pressed else 0
@@ -568,17 +624,41 @@ class CarAIWindow(arcade.Window):
         self.leaderboard.move(x=16, y=self.window_height - 48)
         self.bot_panel.move(x=16, y=self.window_height - 48 - Leaderboard.HEIGHT - BOT_PANEL_GAP)
 
+        self.tab_bar.move(x=self.viewport_width / 2, y=self.window_height - 24)
+        model_picker_y = self.window_height - 88
+        self.model_picker.move(x=16, y=model_picker_y)
+        race_button_y = model_picker_y - 30 - MAX_LIST_HEIGHT - 24
+        self.race_start_button.move(x=16 + self.model_picker.width / 2, y=race_button_y)
+
         if self.track is not None:
             self._rebuild_screen_transform()
             self._build_render_cache()
 
     def on_mouse_motion(self, x: int, y: int, dx: int, dy: int) -> None:
-        self.panel.on_mouse_motion(x, y)
+        if self.mode == "train":
+            self.panel.on_mouse_motion(x, y)
 
     def on_mouse_scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
-        self.bot_panel.on_mouse_scroll(x, y, scroll_y)
+        if self.mode == "train":
+            self.bot_panel.on_mouse_scroll(x, y, scroll_y)
+        else:
+            self.model_picker.on_mouse_scroll(x, y, scroll_y)
 
     def on_mouse_press(self, x: int, y: int, button: int, modifiers: int) -> None:
+        tab_action = self.tab_bar.on_mouse_press(x, y)
+        if tab_action is not None:
+            self.mode = tab_action
+            return
+
+        if self.mode == "races":
+            self.model_picker.on_mouse_press(x, y)
+            if self.race_start_button.enabled and self.race_start_button.contains(x, y):
+                if self.race_session is not None:
+                    self.race_session = None
+                elif self.model_picker.selected and self.track is not None:
+                    self.race_session = RaceSession(self.track, self.model_picker.selected_paths())
+            return
+
         self.bot_panel.on_mouse_press(x, y)
         action = self.panel.on_mouse_press(x, y)
         if action == "new_track":

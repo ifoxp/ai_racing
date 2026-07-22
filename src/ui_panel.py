@@ -314,6 +314,68 @@ class LabeledSlider:
         self._label_text.draw()
 
 
+class TabBar:
+    """Верхній перемикач режимів вікна ("Навчання" / "Заїзди") — дві рівні
+    вкладки, активна підсвічена акцентним кольором. Сам перемикач НЕ знає,
+    що саме означають режими — лише повертає обраний ключ, як і Button."""
+
+    def __init__(self, x: float, y: float, width: float, height: float, tabs: list[tuple[str, str]]):
+        # tabs: [(key, label), ...]
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.tabs = tabs
+        self.active_key = tabs[0][0]
+        self._texts = [
+            arcade.Text(
+                label, 0, 0, theme.TEXT_SECONDARY, font_size=12.5,
+                anchor_x="center", anchor_y="center", font_name=theme.FONT, bold=True,
+            )
+            for _, label in tabs
+        ]
+        self.move(x, y)
+
+    def move(self, x: float, y: float) -> None:
+        self.x = x
+        self.y = y
+        tab_w = self.width / len(self.tabs)
+        for i, text in enumerate(self._texts):
+            text.x = x - self.width / 2 + tab_w * (i + 0.5)
+            text.y = y
+
+    def _tab_bounds(self, index: int) -> tuple[float, float, float, float]:
+        tab_w = self.width / len(self.tabs)
+        left = self.x - self.width / 2 + tab_w * index
+        return left, left + tab_w, self.y - self.height / 2, self.y + self.height / 2
+
+    def draw(self) -> None:
+        left = self.x - self.width / 2
+        right = self.x + self.width / 2
+        bottom = self.y - self.height / 2
+        top = self.y + self.height / 2
+        arcade.draw_lrbt_rectangle_filled(left, right, bottom, top, theme.BG_CARD)
+        arcade.draw_lrbt_rectangle_outline(left, right, bottom, top, theme.BORDER, border_width=1.5)
+
+        for i, (key, _) in enumerate(self.tabs):
+            t_left, t_right, t_bottom, t_top = self._tab_bounds(i)
+            is_active = key == self.active_key
+            if is_active:
+                arcade.draw_lrbt_rectangle_filled(t_left, t_right, t_bottom, t_top, theme.ACCENT_SOFT)
+            self._texts[i].color = theme.ACCENT_STRONG if is_active else theme.TEXT_SECONDARY
+            self._texts[i].draw()
+            if i > 0:
+                arcade.draw_line(t_left, bottom, t_left, top, theme.BORDER, line_width=1)
+
+    def on_mouse_press(self, x: float, y: float) -> str | None:
+        for i, (key, _) in enumerate(self.tabs):
+            t_left, t_right, t_bottom, t_top = self._tab_bounds(i)
+            if t_left <= x <= t_right and t_bottom <= y <= t_top:
+                self.active_key = key
+                return key
+        return None
+
+
 class Section:
     """Заголовок-розділювач всередині панелі (напр. 'ТРАСА', 'НАВЧАННЯ')."""
 

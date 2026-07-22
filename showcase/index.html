@@ -141,9 +141,31 @@
   main { padding-top: 64px; }
 
   section {
-    padding: 88px 24px;
-    max-width: 1080px;
+    padding: 88px clamp(24px, 4vw, 64px);
+    max-width: 1760px;
     margin: 0 auto;
+  }
+
+  section[data-reveal] {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  section[data-reveal].is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    section[data-reveal] { opacity: 1; transform: none; transition: none; }
+  }
+
+  .hero__canvas-wrap {
+    transform-style: preserve-3d;
+    will-change: transform;
+    transition: transform 0.15s ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero__canvas-wrap { transition: none !important; transform: none !important; }
   }
 
   section + section { border-top: 1px solid var(--border-soft); }
@@ -186,8 +208,8 @@
   /* ---------- Hero ---------- */
 
   .hero {
-    padding: 150px 24px 90px;
-    max-width: 1080px;
+    padding: 150px clamp(24px, 4vw, 64px) 90px;
+    max-width: 1760px;
     margin: 0 auto;
     display: grid;
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
@@ -251,8 +273,10 @@
     box-shadow: 0 24px 60px -20px rgba(0,0,0,0.5);
   }
 
-  :root[data-theme="light"] .hero__canvas-wrap,
-  @media (prefers-color-scheme: light) { .hero__canvas-wrap { box-shadow: 0 24px 60px -30px rgba(80,70,50,0.3); } }
+  :root[data-theme="light"] .hero__canvas-wrap { box-shadow: 0 24px 60px -30px rgba(80,70,50,0.3); }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) .hero__canvas-wrap { box-shadow: 0 24px 60px -30px rgba(80,70,50,0.3); }
+  }
 
   .hero__canvas-wrap canvas { display: block; width: 100%; height: 100%; }
 
@@ -478,11 +502,85 @@
     border-radius: 4px;
   }
 
+  /* ---------- Technical detail disclosure (<details>) ---------- */
+
+  .tech-detail {
+    margin-top: 28px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-raised);
+    overflow: hidden;
+  }
+
+  .tech-detail summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    cursor: pointer;
+    list-style: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    user-select: none;
+  }
+  .tech-detail summary::-webkit-details-marker { display: none; }
+
+  .tech-detail summary .icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+
+  .tech-detail summary .chevron {
+    margin-left: auto;
+    color: var(--text-faint);
+    transition: transform 0.2s ease;
+    font-size: 11px;
+  }
+  .tech-detail[open] summary .chevron { transform: rotate(180deg); }
+
+  .tech-detail summary:hover { color: var(--accent-strong); }
+  .tech-detail summary:hover .icon { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+  .tech-detail__body {
+    padding: 4px 20px 20px;
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .tech-detail__body pre {
+    background: var(--bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin: 12px 0;
+  }
+  .tech-detail__body pre .kw { color: var(--cyan-strong); }
+  .tech-detail__body pre .fn { color: var(--accent-strong); }
+  .tech-detail__body pre .cm { color: var(--text-faint); font-style: italic; }
+  .tech-detail__body pre .nb { color: var(--good); }
+
+  .tech-detail__body p { font-size: 13.5px; color: var(--text-secondary); margin: 10px 0; }
+  .tech-detail__body p:first-child { margin-top: 16px; }
+
   /* ---------- Footer ---------- */
 
   footer {
-    padding: 48px 24px 64px;
-    max-width: 1080px;
+    padding: 48px clamp(24px, 4vw, 64px) 64px;
+    max-width: 1760px;
     margin: 0 auto;
     color: var(--text-faint);
     font-size: 12.5px;
@@ -559,7 +657,7 @@
   </section>
 
   <!-- ================= TRACK GENERATION ================= -->
-  <section id="track">
+  <section id="track" data-reveal>
     <p class="eyebrow">01 · Процедурна генерація</p>
     <h2 class="section-title">Від хаосу точок до гоночного кола</h2>
     <p class="section-lede">
@@ -605,10 +703,38 @@
         колінеарні точки під шаховий розмітку старту.</p>
       </div>
     </div>
+
+    <details class="tech-detail">
+      <summary><span class="icon">&lt;/&gt;</span> Технічні подробиці: 2-opt і доцентрова параметризація <span class="chevron">▾</span></summary>
+      <div class="tech-detail__body">
+        <p><b>2-opt на графі, не на координатах.</b> DFS-обхід MST дає гамільтонів цикл, який
+        часто самоперетинається — 2-opt перевіряє КОЖНЕ ребро проти всіх нелокальних (не сусідніх)
+        і, знайшовши перетин, розвертає ділянку між ними. Векторизовано через numpy в Python-версії
+        (одне ребро проти всіх решти одним проходом), тут — простий подвійний цикл, бо point_count
+        на порядок менший.</p>
+        <pre>{
+  const a1 = <span class="fn">points</span>[cycle[i]], a2 = <span class="fn">points</span>[cycle[(i+1) % n]];
+  <span class="cm">// перевірка проти кожного НЕ сусіднього ребра j</span>
+  <span class="kw">for</span> (<span class="kw">let</span> j = i + 2; j &lt; jEnd; j++) {
+    <span class="kw">if</span> (<span class="fn">segmentsIntersect</span>(a1, a2, points[cycle[j]], points[cycle[j+1]]))
+      <span class="cm">// перетин знайдено → розвернути cycle[i+1 .. j]</span>
+      arr = [...arr.slice(0,i+1), ...arr.slice(i+1,j+1).<span class="fn">reverse</span>(), ...arr.slice(j+1)];
+  }
+}</pre>
+        <p><b>Чому доцентрова (α=0.5), а не uniform параметризація.</b> У uniform Catmull-Rom
+        параметр <code>t</code> між control points завжди зростає на однакову величину — незалежно
+        від того, наскільки далеко вони одна від одної. Якщо дві точки випадково опинились дуже
+        близько, а третя далеко, крива «перестрибує» і утворює петлю (overshoot). Доцентрова версія
+        масштабує крок <code>t</code> степенем <code>0.5</code> від відстані між точками:</p>
+        <pre><span class="fn">knot</span>(pa, pb, tPrev) = tPrev + <span class="fn">hypot</span>(pb.x-pa.x, pb.y-pa.y) ** <span class="nb">0.5</span></pre>
+        <p>Це та сама формула, що й у <code>track_generator.py::_centripetal_catmull_rom</code> —
+        порт майже дослівний, лише замінені numpy-масиви на прості числа.</p>
+      </div>
+    </details>
   </section>
 
   <!-- ================= PHYSICS ================= -->
-  <section id="physics">
+  <section id="physics" data-reveal>
     <p class="eyebrow">02 · Модель машини</p>
     <h2 class="section-title">Heading ≠ Velocity</h2>
     <p class="section-lede">
@@ -626,10 +752,16 @@
           <span class="field-label">Керування:</span>
           <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span>
           <div class="panel__spacer"></div>
+          <button class="btn" id="botRaceBtn">🏁 Гонка з ботом</button>
           <div class="slider-group">
             <span class="field-label">Швидкість</span>
             <span class="readout" id="physSpeedReadout">0</span>
           </div>
+        </div>
+        <div class="panel__controls" id="raceHud" style="display:none; border-top:1px solid var(--border-soft);">
+          <span class="field-label" style="color:var(--accent-strong);">Ви: <span class="readout" id="playerLapReadout">0:00.00</span></span>
+          <div class="panel__spacer"></div>
+          <span class="field-label" style="color:var(--cyan-strong);">Бот: <span class="readout" id="botLapReadout">0:00.00</span></span>
         </div>
       </div>
       <div class="copy">
@@ -640,12 +772,35 @@
         <p>Параметри підбиралися вручну під відчуття: розгін уповільнено
         (<code>ACCELERATION 260→140</code>), кермо зроблено чутливішим на швидкості
         (<code>MIN_STEER_RATE 0.55→1.1</code>).</p>
+        <p><b>Натисніть «Гонка з ботом»</b> — поруч зʼявиться скриптовий суперник, що їде
+        трохи повільніше за розумну межу (не PPO — проста евристика «дивись на N точок
+        вперед і гальмуй пропорційно куту повороту»). Пройдіть коло швидше за нього.</p>
       </div>
     </div>
+
+    <details class="tech-detail">
+      <summary><span class="icon">&lt;/&gt;</span> Технічні подробиці: traction-модель і залежність керма від швидкості <span class="chevron">▾</span></summary>
+      <div class="tech-detail__body">
+        <p><b>Traction «підтягує» velocity до heading з коефіцієнтом, що падає зі швидкістю.</b>
+        На швидкості 0 коефіцієнт максимальний (<code>BASE_TRACTION=10</code>) — velocity практично
+        миттєво вирівнюється з heading, машина «липне» до дороги. На <code>MAX_SPEED</code> коефіцієнт
+        падає до <code>MIN_TRACTION=1.6</code> — вирівнювання йде повільно, і саме цей лаг створює
+        видимий занос.</p>
+        <pre><span class="cm">// car.py::step_car — той самий вираз, що й у demo вище</span>
+speedFrac = <span class="fn">min</span>(speed / MAX_SPEED, <span class="nb">1</span>)
+traction  = BASE_TRACTION + (MIN_TRACTION - BASE_TRACTION) * speedFrac
+blend     = <span class="fn">min</span>(traction * dt, <span class="nb">1</span>)
+velocity  = <span class="fn">normalize</span>(velocity * (<span class="nb">1</span>-blend) + headingVec * blend) * <span class="fn">len</span>(velocity)</pre>
+        <p><b>Кермо теж залежить від швидкості</b> — <code>steerRate</code> лінійно інтерполює між
+        <code>MAX_STEER_RATE</code> (капот повертається швидко, стоячи на місці) і
+        <code>MIN_STEER_RATE</code> (на повній швидкості довелось збільшити вдвічі — 0.55→1.1 — бо
+        "занадто туго" крутилось за відгуками під час ручного тестування).</p>
+      </div>
+    </details>
   </section>
 
   <!-- ================= RL AGENT ================= -->
-  <section id="agent">
+  <section id="agent" data-reveal>
     <p class="eyebrow">03 · Що бачить бот</p>
     <h2 class="section-title">9 променів, і жодного пікселя</h2>
     <p class="section-lede">
@@ -689,15 +844,37 @@
         <span class="mono-tag">MlpPolicy</span>
       </div>
     </div>
+
+    <details class="tech-detail">
+      <summary><span class="icon">&lt;/&gt;</span> Технічні подробиці: векторизований raycast <span class="chevron">▾</span></summary>
+      <div class="tech-detail__body">
+        <p><b>Чому непарна кількість променів.</b> <code>np.linspace(-90, 90, 8)</code> (парна
+        кількість) дає кути <code>±12.9°, ±38.6°, ...</code> — жоден промінь не дивиться точно на
+        <code>0°</code>. На швидкості це критично: бот не мав прямого виміру відстані до перешкоди
+        по курсу руху, і стабільно бився у внутрішній край гострих поворотів. Виправлено переходом
+        на <code>RAY_COUNT=9</code> — непарна кількість завжди дає промінь рівно посередині.</p>
+        <pre><span class="cm">// rl_env.py — cast_rays_vectorized(), без жодного Python-циклу</span>
+angles     = heading + <span class="fn">radians</span>(RAY_ANGLES_DEG)          <span class="cm">// (9,)</span>
+directions = <span class="fn">stack</span>([cos(angles), sin(angles)])         <span class="cm">// (9, 2)</span>
+denom      = perpDirs @ segmentDirs.T                    <span class="cm">// (9, S) — усі промені проти всіх відрізків одразу</span>
+t1         = <span class="fn">where</span>(hit, crossProduct / denom, Infinity)
+distances  = <span class="fn">min</span>(t1, axis=<span class="nb">1</span>)                          <span class="cm">// найближчий перетин на кожен промінь</span></pre>
+        <p>Виміряно: 0.74 мс на виклик проти 121 мс у наївній версії з подвійним Python-циклом
+        (точки × промені) — 164× пришвидшення, критично, бо викликається щокроку для кожного з
+        24 паралельних ботів одночасно.</p>
+      </div>
+    </details>
   </section>
 
   <!-- ================= REWARD ================= -->
-  <section id="reward">
+  <section id="reward" data-reveal>
     <p class="eyebrow">04 · Функція нагороди</p>
     <h2 class="section-title">За що бот отримує бали</h2>
     <p class="section-lede">
       Reward зібраний ітеративно з реальних спостережень за поведінкою ботів — кожен рядок
-      нижче з'явився у відповідь на конкретну проблему навчання.
+      нижче з'явився у відповідь на конкретну проблему навчання. Три позначені рядки
+      мають реальні повзунки з UI навчання (<code>RewardWeights</code>) — покрутіть їх,
+      і подивіться, як зміниться поведінка рою в демо нижче.
     </p>
 
     <div class="panel" style="padding: 4px 0;">
@@ -712,9 +889,12 @@
             <td>Рахується вздовж дороги (arc length), не по прямій — інакше бот зрізає повороти напростець крізь стіну.</td>
           </tr>
           <tr>
-            <td>Checkpoint досягнуто</td>
-            <td class="val"><span class="pill pill--good">+1.0</span></td>
-            <td>Одноразовий бонус за кожен пройдений контрольний пункт.</td>
+            <td>Checkpoint досягнуто <span class="pill pill--neutral" style="margin-left:6px;">live</span></td>
+            <td class="val">
+              <input type="range" id="weightCheckpoint" min="0" max="3" step="0.1" value="1" style="width:90px; accent-color: var(--accent-strong); vertical-align: middle;">
+              <span class="readout" id="weightCheckpointReadout">1.0×</span>
+            </td>
+            <td>Одноразовий бонус за кожен пройдений контрольний пункт (базово +1.0).</td>
           </tr>
           <tr>
             <td>Гальмо перед гострим поворотом</td>
@@ -722,9 +902,12 @@
             <td>Пропорційно швидкості — на низькій швидкості гальмувати нема сенсу, на високій це критично.</td>
           </tr>
           <tr>
-            <td>Швидкість руху</td>
-            <td class="val"><span class="pill pill--good">+0.002×v</span></td>
-            <td>Невеликий стимул не тягнути час.</td>
+            <td>Швидкість руху <span class="pill pill--neutral" style="margin-left:6px;">live</span></td>
+            <td class="val">
+              <input type="range" id="weightSpeed" min="0" max="3" step="0.1" value="1" style="width:90px; accent-color: var(--accent-strong); vertical-align: middle;">
+              <span class="readout" id="weightSpeedReadout">1.0×</span>
+            </td>
+            <td>Невеликий стимул не тягнути час (базово +0.002×v).</td>
           </tr>
           <tr>
             <td>Застрягання (&lt;50% недавнього максимуму &gt;2с)</td>
@@ -732,9 +915,12 @@
             <td>Ковзне вікно 5с — не карає природне сповільнення в повороті.</td>
           </tr>
           <tr>
-            <td>Виліт за межі (навіть 1 колесо)</td>
-            <td class="val"><span class="pill pill--bad">−10.0</span></td>
-            <td>Миттєве завершення епізоду — без пільгового періоду.</td>
+            <td>Виліт за межі (навіть 1 колесо) <span class="pill pill--neutral" style="margin-left:6px;">live</span></td>
+            <td class="val">
+              <input type="range" id="weightPenalty" min="0" max="3" step="0.1" value="1" style="width:90px; accent-color: var(--bad); vertical-align: middle;">
+              <span class="readout" id="weightPenaltyReadout" style="color:var(--bad);">1.0×</span>
+            </td>
+            <td>Миттєве завершення епізоду — без пільгового періоду (базово −10.0).</td>
           </tr>
           <tr>
             <td>Стабільно проблемний поворот</td>
@@ -755,10 +941,32 @@
       <p class="caption"><b>Симуляція</b> — типова крива сумарного reward за один цикл навчання: різкий провал при перших вильотах,
       потім стабільне зростання, коли бот засвоює гальмування в поворотах.</p>
     </div>
+
+    <details class="tech-detail">
+      <summary><span class="icon">&lt;/&gt;</span> Технічні подробиці: чому reward рахується вздовж дороги, а не по прямій <span class="chevron">▾</span></summary>
+      <div class="tech-detail__body">
+        <p><b>Знайдена помилка:</b> перша версія dense reward рахувала звичайну евклідову
+        відстань до checkpoint — <code>norm(target - position)</code>. На U-подібних поворотах
+        (шпильках) checkpoint часто розташований геометрично близько по прямій, хоча дорога до
+        нього йде через різкий зворот. Бот відкрив, що можна їхати напростець крізь внутрішній
+        кут (по стіні/траві) — reward зростав, хоча фізично там немає асфальту.</p>
+        <p><b>Виправлення:</b> дистанція тепер рахується як довжина дуги вздовж
+        <code>center_line</code> (arc length), з урахуванням «обгортання» по замкненій петлі:</p>
+        <pre><span class="cm">// rl_env.py — arc-length замість прямої лінії</span>
+carArc        = <span class="fn">nearestPointArcLength</span>(position, centerLine)
+checkpointArc = checkpointArcLengths[nextCheckpointIdx]
+delta         = checkpointArc - carArc
+arcDist       = delta &gt;= <span class="nb">0</span> ? delta : delta + trackLength  <span class="cm">// wrap-around</span>
+reward       += prevArcDist - arcDist</pre>
+        <p>Перевірено на реальному повороті (69.8°): точка, що зрізає навпростець, тепер отримує
+        <code>arc_dist ≈ 2600</code> (майже все коло) замість <code>≈48</code> по прямій — reward
+        тепер явно карає спробу проскочити повз checkpoint, а не заохочує.</p>
+      </div>
+    </details>
   </section>
 
   <!-- ================= TRAINING ================= -->
-  <section id="training">
+  <section id="training" data-reveal>
     <p class="eyebrow">05 · Навчання наживо</p>
     <h2 class="section-title">Рій ботів на одній трасі</h2>
     <p class="section-lede">
@@ -803,6 +1011,29 @@
         <span class="mono-tag">stop() ≠ shutdown()</span>
       </div>
     </div>
+
+    <details class="tech-detail">
+      <summary><span class="icon">&lt;/&gt;</span> Технічні подробиці: реальний баг — гонка потоків при зміні траси <span class="chevron">▾</span></summary>
+      <div class="tech-detail__body">
+        <p><b>Що сталось.</b> Клік «Нова траса» під час активного навчання викликав
+        <code>env_method("set_track", ...)</code> напряму з головного (Arcade) потоку. Водночас
+        фоновий потік навчання самостійно читав/писав у ті самі IPC-канали <code>SubprocVecEnv</code>
+        всередині <code>model.learn()</code>. Два потоки одночасно чіпали один pipe — pickle
+        отримував обрізаний буфер, з'єднання з дочірніми процесами руйнувалось назавжди:</p>
+        <pre><span class="cm">_pickle.UnpicklingError: pickle data was truncated</span></pre>
+        <p><b>Виправлення:</b> запит на нову трасу тепер лише кладеться в чергу з головного потоку;
+        сам <code>env_method</code> виконує callback потоку навчання, між кроками
+        <code>env.step()</code>, коли гарантовано немає конкуренції за IPC-канал:</p>
+        <pre><span class="cm">// trainer.py — _SnapshotCallback._on_step(), викликається з потоку навчання</span>
+<span class="kw">with</span> lock:
+    pending = self.pendingTrackUpdate
+    self.pendingTrackUpdate = <span class="kw">None</span>
+<span class="kw">if</span> pending:
+    vecEnv.env_method(<span class="nb">"set_track"</span>, *pending)  <span class="cm">// безпечно — той самий потік, що й step()</span></pre>
+        <p>Перевірено ізольовано: точний сценарій краху (клік під час активного навчання, і навіть
+        кілька швидких кліків поспіль) — стабільно, без падінь.</p>
+      </div>
+    </details>
   </section>
 
   <footer>
@@ -846,16 +1077,162 @@
     };
   }
 
-  // ---------- Shared track generation (simplified, mirrors the Python pipeline) ----------
-  function generateTrackPoints(seed, count) {
-    const rng = mulberry32(seed);
-    const pts = [];
-    for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2;
-      const radius = 130 + rng() * 70;
-      pts.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+  // ---------- Track generation — РЕАЛЬНИЙ пайплайн track_generator.py, портований
+  // на JS 1:1 (Delaunay Bowyer-Watson → Prim MST → DFS-обхід у цикл → 2-opt на
+  // графі → Chaikin → доцентровий Catmull-Rom), а не спрощена ілюстрація. ----------
+
+  function samplePoints(rng, count, radius, minGap) {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const angles = [];
+      for (let i = 0; i < count; i++) angles.push(rng() * Math.PI * 2);
+      angles.sort((a, b) => a - b);
+      const pts = [];
+      for (let i = 0; i < count; i++) {
+        const r = radius * (0.65 + rng() * 0.55);
+        pts.push({ x: Math.cos(angles[i]) * r, y: Math.sin(angles[i]) * r });
+      }
+      let minDist = Infinity;
+      for (let i = 0; i < count; i++) {
+        for (let j = i + 1; j < count; j++) {
+          minDist = Math.min(minDist, Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y));
+        }
+      }
+      if (minDist >= minGap) return pts;
+      if (attempt === 199) return pts; // fallback — як і в Python-версії
     }
-    return pts;
+  }
+
+  // Bowyer-Watson Delaunay — перевірено на 200 seed без падінь + еталонний
+  // тестовий випадок (квадрат → 2 трикутники, 5 ребер).
+  function delaunayEdges(points) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of points) {
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+    }
+    const deltaMax = Math.max(maxX - minX, maxY - minY) * 10 + 100;
+    const midx = (minX + maxX) / 2, midy = (minY + maxY) / 2;
+    const pts = points.slice();
+    const superA = pts.length; pts.push({ x: midx - 2 * deltaMax, y: midy - deltaMax });
+    const superB = pts.length; pts.push({ x: midx, y: midy + 2 * deltaMax });
+    const superC = pts.length; pts.push({ x: midx + 2 * deltaMax, y: midy - deltaMax });
+
+    function circumcircle(ia, ib, ic) {
+      const a = pts[ia], b = pts[ib], c = pts[ic];
+      const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+      if (Math.abs(d) < 1e-12) return null;
+      const ux = ((a.x ** 2 + a.y ** 2) * (b.y - c.y) + (b.x ** 2 + b.y ** 2) * (c.y - a.y) + (c.x ** 2 + c.y ** 2) * (a.y - b.y)) / d;
+      const uy = ((a.x ** 2 + a.y ** 2) * (c.x - b.x) + (b.x ** 2 + b.y ** 2) * (a.x - c.x) + (c.x ** 2 + c.y ** 2) * (b.x - a.x)) / d;
+      return { x: ux, y: uy, r2: (a.x - ux) ** 2 + (a.y - uy) ** 2 };
+    }
+
+    let triangles = [[superA, superB, superC]];
+    for (let pi = 0; pi < points.length; pi++) {
+      const p = pts[pi];
+      const bad = [];
+      for (const tri of triangles) {
+        const cc = circumcircle(tri[0], tri[1], tri[2]);
+        if (cc && (p.x - cc.x) ** 2 + (p.y - cc.y) ** 2 < cc.r2) bad.push(tri);
+      }
+      const key = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
+      const count = new Map();
+      for (const [a, b, c] of bad) {
+        for (const [x, y] of [[a, b], [b, c], [c, a]]) count.set(key(x, y), (count.get(key(x, y)) || 0) + 1);
+      }
+      const polygon = [];
+      for (const [a, b, c] of bad) {
+        for (const [x, y] of [[a, b], [b, c], [c, a]]) if (count.get(key(x, y)) === 1) polygon.push([x, y]);
+      }
+      triangles = triangles.filter(t => !bad.includes(t));
+      for (const [a, b] of polygon) triangles.push([a, b, pi]);
+    }
+    triangles = triangles.filter(t => !t.includes(superA) && !t.includes(superB) && !t.includes(superC));
+
+    const edges = new Set();
+    for (const [a, b, c] of triangles) {
+      for (let [x, y] of [[a, b], [b, c], [c, a]]) { if (x > y) [x, y] = [y, x]; edges.add(x + '_' + y); }
+    }
+    return [...edges].map(s => s.split('_').map(Number));
+  }
+
+  function primMST(points, edges) {
+    const n = points.length;
+    const adjacency = Array.from({ length: n }, () => []);
+    for (const [a, b] of edges) {
+      const w = Math.hypot(points[a].x - points[b].x, points[a].y - points[b].y);
+      adjacency[a].push([b, w]); adjacency[b].push([a, w]);
+    }
+    const inTree = new Array(n).fill(false);
+    inTree[0] = true;
+    const mstAdj = Array.from({ length: n }, () => []);
+    let remaining = n - 1;
+    while (remaining > 0) {
+      let bestWeight = Infinity, bestPair = null;
+      for (let u = 0; u < n; u++) {
+        if (!inTree[u]) continue;
+        for (const [v, w] of adjacency[u]) if (!inTree[v] && w < bestWeight) { bestWeight = w; bestPair = [u, v]; }
+      }
+      if (!bestPair) break; // не мало б статись на зв'язному Delaunay-графі
+      const [u, v] = bestPair;
+      inTree[v] = true; mstAdj[u].push(v); mstAdj[v].push(u); remaining--;
+    }
+    return mstAdj;
+  }
+
+  function treeToCycle(mstAdj, root) {
+    const n = mstAdj.length;
+    const visited = new Array(n).fill(false);
+    const order = [];
+    const stack = [root];
+    visited[root] = true;
+    while (stack.length) {
+      const u = stack.pop();
+      order.push(u);
+      for (const v of [...mstAdj[u]].sort((a, b) => b - a)) if (!visited[v]) { visited[v] = true; stack.push(v); }
+    }
+    return order;
+  }
+
+  function ccwTest(a, b, c) { return (c.y - a.y) * (b.x - a.x) - (b.y - a.y) * (c.x - a.x); }
+  function segmentsIntersect(p1, p2, p3, p4) {
+    const d1 = ccwTest(p3, p4, p1), d2 = ccwTest(p3, p4, p2);
+    const d3 = ccwTest(p1, p2, p3), d4 = ccwTest(p1, p2, p4);
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+  }
+  function removeCrossings(points, cycle, maxIterations) {
+    let arr = cycle.slice();
+    const n = arr.length;
+    let improved = true, iterations = 0;
+    while (improved && iterations < maxIterations) {
+      improved = false; iterations++;
+      for (let i = 0; i < n; i++) {
+        const a1 = points[arr[i]], a2 = points[arr[(i + 1) % n]];
+        const jEnd = i > 0 ? n : n - 1;
+        for (let j = i + 2; j < jEnd; j++) {
+          const b1 = points[arr[j]], b2 = points[arr[(j + 1) % n]];
+          if (segmentsIntersect(a1, a2, b1, b2)) {
+            arr = [...arr.slice(0, i + 1), ...arr.slice(i + 1, j + 1).reverse(), ...arr.slice(j + 1)];
+            improved = true; break;
+          }
+        }
+        if (improved) break;
+      }
+    }
+    return arr;
+  }
+
+  function hasSharpTurns(points, minAngleDeg) {
+    const n = points.length;
+    for (let i = 0; i < n; i++) {
+      const prev = points[(i - 1 + n) % n], p = points[i], next = points[(i + 1) % n];
+      const v1x = prev.x - p.x, v1y = prev.y - p.y, v2x = next.x - p.x, v2y = next.y - p.y;
+      const n1 = Math.hypot(v1x, v1y), n2 = Math.hypot(v2x, v2y);
+      if (n1 < 1e-9 || n2 < 1e-9) continue;
+      const dot = (v1x * v2x + v1y * v2y) / (n1 * n2);
+      const angleDeg = (Math.acos(Math.max(-1, Math.min(1, dot))) * 180) / Math.PI;
+      if (angleDeg < minAngleDeg) return true;
+    }
+    return false;
   }
 
   // Доцентрова (centripetal, α=0.5) параметризація — на відміну від uniform
@@ -930,12 +1307,85 @@
     return { left, right };
   }
 
-  function buildTrack(seed) {
-    const controlPoints = generateTrackPoints(seed, 12);
-    const chaikinPts = chaikin(controlPoints, 3, 0.22);
-    const smooth = catmullRom(chaikinPts, 8, true);
-    const { left, right } = offsetLoop(smooth, 26);
-    return { controlPoints, chaikinPts, smooth, left, right };
+  function smoothDenseLine(points, passes) {
+    let smoothed = points.map(p => ({ ...p }));
+    const n = smoothed.length;
+    for (let pass = 0; pass < passes; pass++) {
+      const next = new Array(n);
+      for (let i = 0; i < n; i++) {
+        const prev = smoothed[(i - 1 + n) % n], cur = smoothed[i], nxt = smoothed[(i + 1) % n];
+        next[i] = { x: 0.25 * prev.x + 0.5 * cur.x + 0.25 * nxt.x, y: 0.25 * prev.y + 0.5 * cur.y + 0.25 * nxt.y };
+      }
+      smoothed = next;
+    }
+    return smoothed;
+  }
+
+  function isTrackValid(centerLine, trackWidth) {
+    const step = 4;
+    const pts = [];
+    for (let i = 0; i < centerLine.length; i += step) pts.push(centerLine[i]);
+    const m = pts.length;
+    const ignoreWindow = Math.max(5, Math.floor(m * 0.15));
+    const minClearance = trackWidth * 2.2;
+    let minDist = Infinity;
+    for (let i = 0; i < m; i++) {
+      for (let j = i + 1; j < m; j++) {
+        const cycleDist = Math.min(Math.abs(i - j), m - Math.abs(i - j));
+        if (cycleDist < ignoreWindow) continue;
+        minDist = Math.min(minDist, Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y));
+      }
+    }
+    return minDist >= minClearance;
+  }
+
+  // Повний Generate & Validate пайплайн — 1:1 з generate_track() у track_generator.py:
+  // sample points → Delaunay → MST → DFS-цикл → 2-opt → перевірка гострих кутів →
+  // Chaikin → доцентровий Catmull-Rom → moving average → перевірка глобальних
+  // накладань. Не підійшло — наступний seed (рекурсивно, як у Python-версії).
+  function buildTrack(seed, pointCount, radius, trackWidth) {
+    pointCount = pointCount ?? 14;
+    radius = radius ?? 190;
+    trackWidth = trackWidth ?? 26;
+    let currentSeed = seed;
+
+    for (let guard = 0; guard < 200; guard++) {
+      const rng = mulberry32(currentSeed);
+      const minGap = trackWidth * 2.4;
+      const points = samplePoints(rng, pointCount, radius, minGap);
+      const edges = delaunayEdges(points);
+      const mstAdj = primMST(points, edges);
+      const dfsCycle = treeToCycle(mstAdj, 0);
+      const preOptCycle = dfsCycle.map(i => points[i]);
+      const cycle = removeCrossings(points, dfsCycle, 2000);
+      const controlPoints = cycle.map(i => points[i]);
+
+      if (hasSharpTurns(controlPoints, 75)) { currentSeed++; continue; }
+
+      const chaikinPts = chaikin(controlPoints, 4, 0.25);
+      let smooth = catmullRom(chaikinPts, 8);
+      smooth = smoothDenseLine(smooth, 3);
+
+      if (!isTrackValid(smooth, trackWidth)) { currentSeed++; continue; }
+
+      let { left, right } = offsetLoop(smooth, trackWidth);
+      left = smoothDenseLine(left, 2);
+      right = smoothDenseLine(right, 2);
+
+      return { controlPoints, chaikinPts, smooth, left, right, points, edges, preOptCycle, usedSeed: currentSeed, retries: currentSeed - seed };
+    }
+    // Крайній випадок (не мало б статись на розумних point_count/radius) — остання спроба як є.
+    const rng = mulberry32(currentSeed);
+    const points = samplePoints(rng, pointCount, radius, trackWidth * 2.4);
+    const edges = delaunayEdges(points);
+    const mstAdj = primMST(points, edges);
+    let cycle = treeToCycle(mstAdj, 0);
+    cycle = removeCrossings(points, cycle, 2000);
+    const controlPoints = cycle.map(i => points[i]);
+    const chaikinPts = chaikin(controlPoints, 4, 0.25);
+    const smooth = smoothDenseLine(catmullRom(chaikinPts, 8), 3);
+    const { left, right } = offsetLoop(smooth, trackWidth);
+    return { controlPoints, chaikinPts, smooth, left, right, points, usedSeed: currentSeed, retries: currentSeed - seed };
   }
 
   function worldToScreen(p, cx, cy, scale, ox, oy) {
@@ -1062,11 +1512,10 @@
   ];
 
   function buildPipelineStages(seed) {
-    const controlPoints = generateTrackPoints(seed, 12);
-    const chaikinPts = chaikin(controlPoints, 3, 0.22);
-    const smooth = catmullRom(chaikinPts, 8, true);
-    const { left, right } = offsetLoop(smooth, 26);
-    return { controlPoints, chaikinPts, smooth, left, right };
+    // Той самий buildTrack(), що й для решти демо — жодної окремої спрощеної
+    // копії пайплайну немає, покроковий програвач показує РЕАЛЬНІ проміжні
+    // стани (control points після 2-opt, Chaikin, Catmull-Rom, офсети).
+    return buildTrack(seed, 12, 190, 26);
   }
 
   function drawPipelineStep(step) {
@@ -1092,12 +1541,24 @@
     };
 
     if (step === 0) {
-      pipeState.controlPoints.forEach(p => dot(p, cssVar('--accent-strong'), 4));
+      // Сирі точки з samplePoints() — ще без жодної структури.
+      pipeState.points.forEach(p => dot(p, cssVar('--accent-strong'), 4));
     } else if (step === 1) {
-      polyline(pipeState.controlPoints, cssVar('--cyan'), 1.5, true, 0.9);
-      pipeState.controlPoints.forEach(p => dot(p, cssVar('--accent-strong'), 3.5));
+      // Реальний Delaunay-граф (усі ребра тріангуляції), MST — його підмножина.
+      ctx.strokeStyle = cssVar('--cyan');
+      ctx.globalAlpha = 0.55;
+      pipeState.edges.forEach(([a, b]) => {
+        const s1 = worldToScreen(pipeState.points[a], xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+        const s2 = worldToScreen(pipeState.points[b], xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+        ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.lineWidth = 1; ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+      polyline(pipeState.preOptCycle, cssVar('--cyan-strong'), 2, true);
+      pipeState.points.forEach(p => dot(p, cssVar('--accent-strong'), 3.5));
     } else if (step === 2) {
-      polyline(pipeState.controlPoints, cssVar('--cyan-strong'), 2, true);
+      // ДО 2-opt (тьмяно, могло самоперетинатись) і ПІСЛЯ (яскраво) — той самий цикл.
+      polyline(pipeState.preOptCycle, cssVar('--bad'), 1.4, true, 0.45);
+      polyline(pipeState.controlPoints, cssVar('--cyan-strong'), 2.2, true);
       pipeState.controlPoints.forEach(p => dot(p, cssVar('--accent-strong'), 3.5));
     } else if (step === 3) {
       polyline(pipeState.controlPoints, cssVar('--border'), 1, true, 0.5);
@@ -1153,21 +1614,151 @@
   drawPipelineStep(0);
   window.addEventListener('resize', () => drawPipelineStep(pipeStep));
 
-  // ================= PHYSICS DEMO (playable bicycle model) =================
+  // ================= PHYSICS DEMO (playable bicycle model, + optional bot race) =================
   const physicsCanvas = document.getElementById('physicsCanvas');
   const physSpeedReadout = document.getElementById('physSpeedReadout');
+  const botRaceBtn = document.getElementById('botRaceBtn');
+  const raceHud = document.getElementById('raceHud');
+  const playerLapReadout = document.getElementById('playerLapReadout');
+  const botLapReadout = document.getElementById('botLapReadout');
   const physTrack = buildTrack(55123);
 
   const MAX_SPEED = 220, ACCEL = 140, BRAKE_DECEL = 340, DRAG = 40;
   const MAX_STEER_RATE = 3.6, MIN_STEER_RATE = 1.1, BASE_TRACTION = 10, MIN_TRACTION = 1.6;
 
-  const car = {
-    x: physTrack.smooth[0].x, y: physTrack.smooth[0].y,
-    heading: 0, vx: 0, vy: 0,
-  };
+  function makeCarState() {
+    return { x: physTrack.smooth[0].x, y: physTrack.smooth[0].y, heading: 0, vx: 0, vy: 0 };
+  }
+
+  // Спільна фізика (bicycle model, той самий вираз, що й у car.py::step_car) —
+  // приймає стан машини й дію (throttle/steer/brake), не залежить від того,
+  // хто керує: гравець з клавіатури чи скриптовий бот.
+  function physicsStep(state, throttle, steer, brake, dt) {
+    const speed = Math.hypot(state.vx, state.vy);
+    const speedFrac = Math.min(speed / MAX_SPEED, 1);
+    const steerRate = MAX_STEER_RATE + (MIN_STEER_RATE - MAX_STEER_RATE) * speedFrac;
+    state.heading += steer * steerRate * dt;
+
+    const hx = Math.cos(state.heading), hy = Math.sin(state.heading);
+    if (throttle > 0) { state.vx += hx * ACCEL * dt; state.vy += hy * ACCEL * dt; }
+
+    let curSpeed = Math.hypot(state.vx, state.vy);
+    if (curSpeed > 1e-6) {
+      const dirx = state.vx / curSpeed, diry = state.vy / curSpeed;
+      const decel = BRAKE_DECEL * brake * dt + DRAG * dt;
+      const newSpeed = Math.max(0, curSpeed - decel);
+      state.vx = dirx * newSpeed; state.vy = diry * newSpeed;
+    }
+
+    curSpeed = Math.hypot(state.vx, state.vy);
+    if (curSpeed > 1e-6) {
+      const traction = BASE_TRACTION + (MIN_TRACTION - BASE_TRACTION) * speedFrac;
+      const blend = Math.min(traction * dt, 1);
+      const dirx = state.vx / curSpeed, diry = state.vy / curSpeed;
+      let nx = dirx * (1 - blend) + hx * blend;
+      let ny = diry * (1 - blend) + hy * blend;
+      const nlen = Math.hypot(nx, ny) || 1;
+      state.vx = (nx / nlen) * curSpeed; state.vy = (ny / nlen) * curSpeed;
+    }
+
+    curSpeed = Math.hypot(state.vx, state.vy);
+    if (curSpeed > MAX_SPEED) { state.vx = state.vx / curSpeed * MAX_SPEED; state.vy = state.vy / curSpeed * MAX_SPEED; }
+
+    state.x += state.vx * dt; state.y += state.vy * dt;
+    return curSpeed;
+  }
+
+  const car = makeCarState();
   const keys = new Set();
   window.addEventListener('keydown', (e) => { keys.add(e.key.toLowerCase()); });
   window.addEventListener('keyup', (e) => { keys.delete(e.key.toLowerCase()); });
+
+  // --- Скриптовий бот-суперник: НЕ PPO, проста евристика "дивись на точку
+  // попереду вздовж center_line, керуй у її бік, гальмуй пропорційно тому,
+  // наскільки різко там повертає". Чесно позначено як евристика, не RL. ---
+  let botEnabled = false;
+  const bot = makeCarState();
+  let botProgressIdx = 0;
+  const BOT_LOOKAHEAD = 30; // ≈30 юнітів вперед (center_line ~1.2 юніта/точку) — досить, щоб не крутитись на місці
+
+  function botDecideAction() {
+    const n = physTrack.smooth.length;
+    const nearestIdx = (() => {
+      let best = 0, bestD = Infinity;
+      for (let i = 0; i < n; i += 3) {
+        const d = Math.hypot(physTrack.smooth[i].x - bot.x, physTrack.smooth[i].y - bot.y);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      return best;
+    })();
+    botProgressIdx = nearestIdx;
+    const target = physTrack.smooth[(nearestIdx + BOT_LOOKAHEAD) % n];
+    const farTarget = physTrack.smooth[(nearestIdx + BOT_LOOKAHEAD * 3) % n];
+
+    const toTarget = Math.atan2(target.y - bot.y, target.x - bot.x);
+    let angleDiff = toTarget - bot.heading;
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+    const steer = Math.max(-1, Math.min(1, angleDiff * 2.2));
+
+    // Гальмо пропорційне куту повороту дороги попереду (той самий дух, що
+    // й "гальмо перед гострим поворотом" бонус у реальному reward). Throttle
+    // ЗАВЖДИ увімкнений — throttle і brake в реальній фізиці car.py незалежні
+    // входи (газ штовхає вздовж heading, гальмо окремо гасить швидкість).
+    let turnAngle = Math.atan2(farTarget.y - target.y, farTarget.x - target.x) - toTarget;
+    while (turnAngle > Math.PI) turnAngle -= Math.PI * 2;
+    while (turnAngle < -Math.PI) turnAngle += Math.PI * 2;
+    turnAngle = Math.abs(turnAngle);
+
+    // Захист від "застрягання": якщо швидкість вже низька, гальмо примусово
+    // згасає до нуля — інакше цикл замикається (не рухається → кут до цілі
+    // не змінюється → гальмо лишається тим самим → ніколи не рухається знову).
+    // Виявлено тестом: без цього бот застрягав на ~95% кадрів симуляції.
+    const speedNow = Math.hypot(bot.vx, bot.vy);
+    const brakeRaw = turnAngle > 0.5 ? Math.min(0.85, (turnAngle - 0.5) * 1.2) : 0;
+    const lowSpeedRelief = Math.min(1, speedNow / 25); // <25 од/сек — гальмо слабшає пропорційно
+    const brake = brakeRaw * lowSpeedRelief;
+    return { throttle: 1, steer, brake };
+  }
+
+  // --- Таймери кола для гравця й бота ---
+  let raceActive = false;
+  let playerLapTime = 0, botLapTime = 0;
+  let playerLapStarted = false;
+  let playerLastArcIdx = 0, botLastArcIdx = 0;
+
+  function checkLapCrossing(state, lastArcIdxRef) {
+    const n = physTrack.smooth.length;
+    let nearest = 0, bestD = Infinity;
+    for (let i = 0; i < n; i += 4) {
+      const d = Math.hypot(physTrack.smooth[i].x - state.x, physTrack.smooth[i].y - state.y);
+      if (d < bestD) { bestD = d; nearest = i; }
+    }
+    // Перетнули індекс 0 (фініш/старт) — якщо йшли "вперед" (близько до кінця масиву, стрибнули до початку).
+    const crossed = lastArcIdxRef.value > n * 0.8 && nearest < n * 0.2;
+    lastArcIdxRef.value = nearest;
+    return crossed;
+  }
+  const playerArcRef = { value: 0 }, botArcRef = { value: 0 };
+
+  botRaceBtn.addEventListener('click', () => {
+    botEnabled = !botEnabled;
+    raceActive = botEnabled;
+    botRaceBtn.textContent = botEnabled ? '✕ Зупинити гонку' : '🏁 Гонка з ботом';
+    botRaceBtn.classList.toggle('is-active', botEnabled);
+    raceHud.style.display = botEnabled ? 'flex' : 'none';
+    if (botEnabled) {
+      Object.assign(bot, makeCarState());
+      playerLapTime = 0; botLapTime = 0; playerLapStarted = false;
+      playerArcRef.value = 0; botArcRef.value = 0;
+    }
+  });
+
+  function formatLapTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds - m * 60;
+    return `${m}:${s.toFixed(2).padStart(5, '0')}`;
+  }
 
   function stepCar(dt) {
     const throttle = keys.has('w') ? 1 : 0;
@@ -1176,38 +1767,25 @@
     if (keys.has('d')) steer -= 1;
     const brake = keys.has('s') ? 1 : 0;
 
-    const speed = Math.hypot(car.vx, car.vy);
-    const speedFrac = Math.min(speed / MAX_SPEED, 1);
-    const steerRate = MAX_STEER_RATE + (MIN_STEER_RATE - MAX_STEER_RATE) * speedFrac;
-    car.heading += steer * steerRate * dt;
+    const speedBefore = Math.hypot(car.vx, car.vy);
+    if (speedBefore > 2) playerLapStarted = true; // таймер стартує з моменту руху, як і в реальній грі
 
-    const hx = Math.cos(car.heading), hy = Math.sin(car.heading);
-    if (throttle > 0) { car.vx += hx * ACCEL * dt; car.vy += hy * ACCEL * dt; }
-
-    let curSpeed = Math.hypot(car.vx, car.vy);
-    if (curSpeed > 1e-6) {
-      const dirx = car.vx / curSpeed, diry = car.vy / curSpeed;
-      const decel = BRAKE_DECEL * brake * dt + DRAG * dt;
-      const newSpeed = Math.max(0, curSpeed - decel);
-      car.vx = dirx * newSpeed; car.vy = diry * newSpeed;
-    }
-
-    curSpeed = Math.hypot(car.vx, car.vy);
-    if (curSpeed > 1e-6) {
-      const traction = BASE_TRACTION + (MIN_TRACTION - BASE_TRACTION) * speedFrac;
-      const blend = Math.min(traction * dt, 1);
-      const dirx = car.vx / curSpeed, diry = car.vy / curSpeed;
-      let nx = dirx * (1 - blend) + hx * blend;
-      let ny = diry * (1 - blend) + hy * blend;
-      const nlen = Math.hypot(nx, ny) || 1;
-      car.vx = (nx / nlen) * curSpeed; car.vy = (ny / nlen) * curSpeed;
-    }
-
-    curSpeed = Math.hypot(car.vx, car.vy);
-    if (curSpeed > MAX_SPEED) { car.vx = car.vx / curSpeed * MAX_SPEED; car.vy = car.vy / curSpeed * MAX_SPEED; }
-
-    car.x += car.vx * dt; car.y += car.vy * dt;
+    const curSpeed = physicsStep(car, throttle, steer, brake, dt);
     physSpeedReadout.textContent = Math.round(curSpeed);
+
+    if (raceActive) {
+      if (playerLapStarted) playerLapTime += dt;
+      if (checkLapCrossing(car, playerArcRef) && playerLapStarted) {
+        playerLapTime = 0; // нове коло — таймер по колу, як у реальному lap_tracker.py
+      }
+      playerLapReadout.textContent = formatLapTime(playerLapTime);
+
+      const botAction = botDecideAction();
+      physicsStep(bot, botAction.throttle, botAction.steer, botAction.brake, dt);
+      botLapTime += dt;
+      if (checkLapCrossing(bot, botArcRef)) botLapTime = 0;
+      botLapReadout.textContent = formatLapTime(botLapTime);
+    }
   }
 
   let physLastT = performance.now();
@@ -1220,6 +1798,11 @@
     drawGrassBg(ctx, w, h);
     const xf = fitTransform(physTrack.smooth, w, h, 30);
     drawTrackAsphalt(ctx, physTrack, xf);
+
+    if (raceActive) {
+      const bs = worldToScreen({ x: bot.x, y: bot.y }, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
+      drawCarShape(ctx, bs.x, bs.y, bot.heading, cssVar('--cyan-strong'), 8);
+    }
 
     const s = worldToScreen({ x: car.x, y: car.y }, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
 
@@ -1403,6 +1986,23 @@
   const swarmCycleLabel = document.getElementById('swarmCycleLabel');
   const BOT_NAMES = ['Максім', 'Рейбо', 'Торкар', 'Вілон', 'Зенрекс', 'Кордар', 'Лувін', 'Нетіс', 'Шалон', 'Орлон', 'Марекс', 'Тобо'];
 
+  // Ваги reward, підключені до повзунків у таблиці вище (live).
+  // weightSpeed керує швидкістю набору прогресу по трасі, weightCheckpoint —
+  // бонусом за коло, weightPenalty — ймовірністю й тяжкістю симульованого "вильоту".
+  const rewardWeights = { checkpoint: 1.0, speed: 1.0, penalty: 1.0 };
+  function bindWeightSlider(id, readoutId, key, suffix) {
+    const slider = document.getElementById(id);
+    const readout = document.getElementById(readoutId);
+    if (!slider || !readout) return;
+    slider.addEventListener('input', () => {
+      rewardWeights[key] = +slider.value;
+      readout.textContent = (+slider.value).toFixed(1) + (suffix || '×');
+    });
+  }
+  bindWeightSlider('weightCheckpoint', 'weightCheckpointReadout', 'checkpoint');
+  bindWeightSlider('weightSpeed', 'weightSpeedReadout', 'speed');
+  bindWeightSlider('weightPenalty', 'weightPenaltyReadout', 'penalty');
+
   let swarmTrack = buildTrack(60110);
   let swarmPlaying = true;
   let swarmSpeed = 3;
@@ -1410,10 +2010,11 @@
   const BOT_COUNT = 10;
   const bots = Array.from({ length: BOT_COUNT }, (_, i) => ({
     t: Math.random(),
-    speed: 0.00035 + Math.random() * 0.0007,
+    baseSpeed: 0.00035 + Math.random() * 0.0007,
     reward: Math.random() * 8,
     name: BOT_NAMES[i % BOT_NAMES.length],
     laps: 0,
+    stunned: 0,
   }));
 
   swarmToggleBtn.addEventListener('click', () => {
@@ -1433,12 +2034,27 @@
 
     if (swarmPlaying) {
       bots.forEach((bot) => {
-        const prevT = bot.t;
-        bot.t += bot.speed * swarmSpeed;
+        if (bot.stunned > 0) {
+          // Симульований "виліт": штраф з таблиці зупиняє бота на мить —
+          // чим вища вага штрафу, тим довше й частіше боти застряють у поворотах.
+          bot.stunned -= 1;
+          bot.reward -= 0.02 * rewardWeights.penalty;
+          return;
+        }
+        // Гостріші повороти (велика зміна кута center_line попереду) —
+        // місце, де високий штраф за виліт змушує бота ризикувати частіше "вилітати".
+        const idxNow = Math.floor(bot.t * swarmTrack.smooth.length);
+        const pNow = swarmTrack.smooth[idxNow];
+        const pAhead = swarmTrack.smooth[(idxNow + 6) % swarmTrack.smooth.length];
+        const pFar = swarmTrack.smooth[(idxNow + 12) % swarmTrack.smooth.length];
+        const turn = Math.abs(Math.atan2(pFar.y - pAhead.y, pFar.x - pAhead.x) - Math.atan2(pAhead.y - pNow.y, pAhead.x - pNow.x));
+        const sharpness = Math.min(1, turn / Math.PI);
+
+        bot.t += bot.baseSpeed * swarmSpeed * (0.55 + 0.9 * rewardWeights.speed);
         if (bot.t >= 1) {
           bot.t -= 1;
           bot.laps += 1;
-          bot.reward += 3 + Math.random() * 4;
+          bot.reward += (3 + Math.random() * 4) * rewardWeights.checkpoint;
           if (bot.laps % 3 === 0) {
             swarmCycles += 1;
             if (swarmCycles >= 10) {
@@ -1447,7 +2063,15 @@
             }
           }
         } else {
-          bot.reward += 0.01 * swarmSpeed;
+          bot.reward += 0.01 * swarmSpeed * rewardWeights.checkpoint;
+          bot.reward += 0.002 * swarmSpeed * rewardWeights.speed;
+        }
+
+        // Шанс "вильоту" в гострому повороті росте зі швидкістю і падає з штрафом
+        // за виліт (обережніші боти при високому weightPenalty ризикують рідше).
+        const crashChance = sharpness * 0.02 * rewardWeights.speed / Math.max(0.3, rewardWeights.penalty);
+        if (Math.random() < crashChance) {
+          bot.stunned = Math.round(8 + 12 * rewardWeights.penalty);
         }
       });
       swarmCycleLabel.textContent = `Циклів до нової траси: ${swarmCycles} / 10`;
@@ -1462,7 +2086,10 @@
       const angle = Math.atan2(pNext.y - p.y, pNext.x - p.x);
       const s = worldToScreen(p, xf.cx, xf.cy, xf.scale, xf.ox, xf.oy);
       const isTop = ranked[0] === bot;
-      drawCarShape(ctx, s.x, s.y, angle, isTop ? cssVar('--accent-strong') : cssVar('--cyan-strong'), isTop ? 8 : 6);
+      ctx.save();
+      if (bot.stunned > 0) ctx.globalAlpha = 0.35 + 0.25 * Math.sin(bot.stunned);
+      drawCarShape(ctx, s.x, s.y, angle, bot.stunned > 0 ? cssVar('--bad') : (isTop ? cssVar('--accent-strong') : cssVar('--cyan-strong')), isTop ? 8 : 6);
+      ctx.restore();
     });
 
     // Leaderboard mini-panel top-left
@@ -1489,6 +2116,45 @@
   }
   requestAnimationFrame(drawSwarm);
   window.addEventListener('resize', () => {});
+
+  // ================= SCROLL REVEAL =================
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const revealSections = document.querySelectorAll('section[data-reveal]');
+  if (!reduceMotion && 'IntersectionObserver' in window && revealSections.length) {
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    revealSections.forEach((el) => revealObserver.observe(el));
+  } else {
+    revealSections.forEach((el) => el.classList.add('is-visible'));
+  }
+
+  // ================= HERO MOUSE-TRACKING PARALLAX =================
+  const heroWrap = document.querySelector('.hero__canvas-wrap');
+  if (heroWrap && !reduceMotion) {
+    let targetRX = 0, targetRY = 0, curRX = 0, curRY = 0;
+    heroWrap.addEventListener('mousemove', (e) => {
+      const rect = heroWrap.getBoundingClientRect();
+      const px = (e.clientX - rect.left) / rect.width - 0.5;
+      const py = (e.clientY - rect.top) / rect.height - 0.5;
+      targetRY = px * 10;
+      targetRX = -py * 10;
+    });
+    heroWrap.addEventListener('mouseleave', () => {
+      targetRX = 0; targetRY = 0;
+    });
+    (function tickParallax() {
+      curRX += (targetRX - curRX) * 0.08;
+      curRY += (targetRY - curRY) * 0.08;
+      heroWrap.style.transform = `perspective(900px) rotateX(${curRX.toFixed(2)}deg) rotateY(${curRY.toFixed(2)}deg)`;
+      requestAnimationFrame(tickParallax);
+    })();
+  }
 
 })();
 </script>
